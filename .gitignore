@@ -1,0 +1,37 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# AI Agent scratch / local session artifacts
+.claude/
+.hermes/
+.kilocode/
+.zencoder/
+.remember/
+.kilo/
+certain-crater/
+nasty-nebula/
+.agents/skills/
+
+# Large local benchmark test logs
+scratch/*.json
+
+# Local cockpit / environment files
+\##*.md
+
+# OS files
+.DS_Store
+Thumbs.db

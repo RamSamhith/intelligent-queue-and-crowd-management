@@ -1,0 +1,10 @@
+# VisionQueue Computer Vision Subsystem Dependencies
+# Python 3.11+
+
+# Core Computer Vision & Deep Learning Runtime
+numpy>=1.26.0,<3.0.0
+opencv-python>=4.8.0,<6.0.0
+onnxruntime-gpu>=1.18.0,<2.0.0
+
+# Testing & Quality Assurance
+pytest>=8.0.0

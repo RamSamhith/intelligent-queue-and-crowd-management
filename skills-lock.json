@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "skills": {
+    "computer-vision-expert": {
+      "source": "sickn33/agentic-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/computer-vision-expert/SKILL.md",
+      "computedHash": "f2171acd9f16796eb91a9591e58cce905191d9bbc4bedd7d896bbf79ba8d4e7f"
+    },
+    "computer-vision-opencv": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "skillPath": "computer-vision-opencv/SKILL.md",
+      "computedHash": "18c248ee75adf4ebffb009c3d98b374629d6c7b9abafd31ab5f01e3c5d812981"
+    },
+    "computer-vision-pipeline": {
+      "source": "curiositech/some_claude_skills",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/computer-vision-pipeline/SKILL.md",
+      "computedHash": "bf91abde7481e23e4efc25b5bf0ed0f8e1839aa4cf5e25859ec611d75afc07ea"
+    },
+    "deep-learning-pytorch": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "skillPath": "deep-learning-pytorch/SKILL.md",
+      "computedHash": "651c310b5e90e28938f5a953b6fce4fa0c0fffa350a2f0b92028aaa66adf04d1"
+    },
+    "deepstream-dev": {
+      "source": "nvidia/skills",
+      "sourceType": "github",
+      "skillPath": "skills/deepstream-dev/SKILL.md",
+      "computedHash": "15226de6397c332d9d8fad4756acbb1d54dcfd4e62e316994014f6f188e88066"
+    },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "computedHash": "b146008599c31057cef1c145774cea5d5afb30e8f43fa802e47a4b461419aaaf"
+    },
+    "yolo": {
+      "source": "ultralytics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/yolo/SKILL.md",
+      "computedHash": "43b307762ef385ad515ed90e85b3cb95116c378341a9fff68721e0d32ddf3e4f"
+    },
+    "yolo-export": {
+      "source": "ultralytics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/yolo-export/SKILL.md",
+      "computedHash": "e4651d8a27b49120da78c3ee0472970ae76a405cfc83f1ef1ede7a0ac526d420"
+    },
+    "yolo-inference": {
+      "source": "ultralytics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/yolo-inference/SKILL.md",
+      "computedHash": "d94b790a222016acc309bf9d667e9f33832e91289771e579f8c0212afc0b5d2c"
+    },
+    "yolo-models": {
+      "source": "ultralytics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/yolo-models/SKILL.md",
+      "computedHash": "3fb1e279286b19a44e6f6c533ade49faf510c3b9a34d4221ac3e3c8fbc8b33a3"
+    }
+  }
+}
