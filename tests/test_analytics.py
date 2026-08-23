@@ -3,12 +3,14 @@
 import pytest
 from visionqueue.analytics import (
     AnalyticsConfig,
+    CapacitySource,
     CapacityState,
     CrowdAnalyticsEngine,
     CrowdAnalyticsState,
     CrowdLevel,
     CrowdThresholds,
     CrowdTrend,
+    SceneProfile,
 )
 
 
@@ -294,3 +296,81 @@ class TestCorePlusAnalytics:
             "frame_id": 15,
             "timestamp": 3.5,
         }
+
+
+class TestSceneIntelligenceAndCalibration:
+    """Tests for optional SceneProfile calibration and effective capacity derivation."""
+
+    def test_manual_capacity_precedence(self):
+        profile = SceneProfile(
+            name="corridor_main",
+            manual_capacity=15,
+            usable_area_m2=50.0,
+            target_density_persons_per_m2=0.5,
+        )
+        cap, source = profile.derive_effective_capacity()
+        assert cap == 15
+        assert source == CapacitySource.MANUAL
+
+    def test_calibrated_capacity_from_area_and_density(self):
+        # 35.5 m^2 * 0.8 persons/m^2 = 28.4 -> floor(28.4) = 28
+        profile = SceneProfile(
+            name="checkout_zone",
+            manual_capacity=None,
+            usable_area_m2=35.5,
+            target_density_persons_per_m2=0.8,
+        )
+        cap, source = profile.derive_effective_capacity()
+        assert cap == 28
+        assert source == CapacitySource.CALIBRATED
+
+    def test_insufficient_calibration_returns_not_set(self):
+        profile = SceneProfile(
+            name="uncalibrated",
+            manual_capacity=None,
+            usable_area_m2=None,
+        )
+        cap, source = profile.derive_effective_capacity()
+        assert cap is None
+        assert source == CapacitySource.NOT_SET
+
+    def test_invalid_area_or_density_returns_not_set(self):
+        profile_zero = SceneProfile(usable_area_m2=0.0)
+        assert profile_zero.derive_effective_capacity() == (None, CapacitySource.NOT_SET)
+
+        profile_neg = SceneProfile(usable_area_m2=-10.0)
+        assert profile_neg.derive_effective_capacity() == (None, CapacitySource.NOT_SET)
+
+        profile_density_zero = SceneProfile(usable_area_m2=20.0, target_density_persons_per_m2=0.0)
+        assert profile_density_zero.derive_effective_capacity() == (None, CapacitySource.NOT_SET)
+
+    def test_to_analytics_config_generation(self):
+        custom_thresh = CrowdThresholds(moderate_threshold=30.0, high_threshold=60.0, critical_threshold=85.0)
+        profile = SceneProfile(
+            usable_area_m2=20.0,
+            target_density_persons_per_m2=1.0,  # 20 capacity
+            thresholds=custom_thresh,
+        )
+        cfg = profile.to_analytics_config(debounce_frames=4, trend_window_size=8)
+        assert cfg.capacity == 20
+        assert cfg.thresholds.moderate_threshold == 30.0
+        assert cfg.debounce_frames == 4
+        assert cfg.trend_window_size == 8
+
+    def test_scene_profile_serialization(self):
+        profile = SceneProfile(
+            name="entrance_cam_01",
+            manual_capacity=25,
+            usable_area_m2=40.0,
+            camera_height_m=3.2,
+            camera_tilt_deg=45.0,
+            horizontal_fov_deg=85.0,
+        )
+        d = profile.to_dict()
+        assert d["name"] == "entrance_cam_01"
+        assert d["manual_capacity"] == 25
+        assert d["effective_capacity"] == 25
+        assert d["capacity_source"] == "MANUAL"
+        assert d["camera_height_m"] == 3.2
+        assert d["camera_tilt_deg"] == 45.0
+        assert d["horizontal_fov_deg"] == 85.0

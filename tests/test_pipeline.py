@@ -290,6 +290,27 @@ class TestCVPipelineIntegration:
         assert "alerts" in d
         assert d["system_state"] in ("STARTING", "LIVE", "DEGRADED", "UNSTABLE", "OFFLINE", "STOPPING")
 
+    def test_scene_profile_capacity_integration(self, mock_detector):
+        from visionqueue.analytics import SceneProfile
+        det = Detection(bbox=(100.0, 100.0, 200.0, 300.0), confidence=0.9, class_id=0)
+        mock_detector.detect_timed.return_value = ([det], 10.0)
+
+        # Usable area = 50.0 m^2, density = 0.4 persons/m^2 -> effective capacity = 20
+        scene = SceneProfile(
+            name="atrium",
+            usable_area_m2=50.0,
+            target_density_persons_per_m2=0.4,
+        )
+        config = CVPipelineConfig(scene=scene)
+        pipeline = CVPipeline(config=config, detector=mock_detector)
+
+        f1 = make_frame_data(frame_id=1, timestamp=1.0)
+        s1 = pipeline.process_frame(f1, timestamp=1.01)
+
+        assert s1.occupancy["capacity"] == 20
+        assert s1.occupancy["capacity_state"] == "SET"
+        assert s1.occupancy["percent"] == 5  # 1 person / 20 capacity = 5%
+
 
 def make_dummy_frame_pipeline(frame_id: int, timestamp: float) -> FrameData:
     return make_frame_data(frame_id=frame_id, timestamp=timestamp)

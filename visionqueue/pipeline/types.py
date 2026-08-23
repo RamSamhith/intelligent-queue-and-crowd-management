@@ -6,7 +6,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from visionqueue.alerts.types import Alert, AlertEngineConfig
-from visionqueue.analytics.types import AnalyticsConfig, CrowdAnalyticsState
+from visionqueue.analytics.types import AnalyticsConfig, CrowdAnalyticsState, SceneProfile
 from visionqueue.camera.types import CameraConfig
 from visionqueue.counting.types import LineCrossingCounts, SessionCounts, VirtualLine
 from visionqueue.detection.types import DetectorConfig
@@ -84,6 +84,7 @@ class CVPipelineConfig:
         roi: Region of Interest configuration (used when enable_roi is True).
         virtual_line: Optional virtual line for entry/exit counting.
         analytics: Occupancy and crowd analytics configuration.
+        scene: Optional scene and deployment profile for effective capacity derivation.
         alerts: P0 alert engine timing configuration.
         reliability: System health and degradation thresholds.
         enable_face_detection: When True, runs YuNet face presence detection.
@@ -98,6 +99,7 @@ class CVPipelineConfig:
     roi: Optional[ROIConfig] = field(default_factory=lambda: ROIConfig(x=0, y=0, width=640, height=480))
     virtual_line: Optional[VirtualLine] = None
     analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
+    scene: Optional[SceneProfile] = None
     alerts: AlertEngineConfig = field(default_factory=AlertEngineConfig)
     reliability: ReliabilityConfig = field(default_factory=ReliabilityConfig)
     enable_face_detection: bool = False

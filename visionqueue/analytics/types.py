@@ -27,6 +27,97 @@ class CapacityState(str, Enum):
     NOT_SET = "NOT_SET"
 
 
+class CapacitySource(str, Enum):
+    """Source provenance of the active capacity setting."""
+    MANUAL = "MANUAL"          # Explicitly set by operator / manual capacity
+    CALIBRATED = "CALIBRATED"  # Derived from physical usable area and target density
+    NOT_SET = "NOT_SET"        # No capacity configured
+
+
+@dataclass(frozen=True)
+class SceneProfile:
+    """Optional physical scene and camera installation profile.
+
+    Enables intelligent derivation of effective capacity and deployment-specific
+    crowd density thresholds without modifying the underlying detector or tracker.
+
+    Attributes:
+        name: Human-readable identifier for the scene / deployment profile.
+        manual_capacity: Explicit operator-defined capacity ceiling.
+        usable_area_m2: Estimated walkable/usable surface area in square meters.
+        target_density_persons_per_m2: Desired spatial comfort density (default: 1.0 person/m²).
+        camera_height_m: Camera mounting height in meters (for documentation/future calibration).
+        camera_tilt_deg: Camera mounting tilt angle in degrees from horizontal.
+        horizontal_fov_deg: Camera lens horizontal field of view in degrees.
+        thresholds: Custom crowd level thresholds, or None to use defaults.
+    """
+    name: str = "default"
+    manual_capacity: Optional[int] = None
+    usable_area_m2: Optional[float] = None
+    target_density_persons_per_m2: float = 1.0
+    camera_height_m: Optional[float] = None
+    camera_tilt_deg: Optional[float] = None
+    horizontal_fov_deg: Optional[float] = None
+    thresholds: Optional[CrowdThresholds] = None
+
+    def derive_effective_capacity(self) -> Tuple[Optional[int], CapacitySource]:
+        """Derive authoritative capacity from manual override or calibrated area.
+
+        Rules:
+        1. Manual capacity takes precedence if provided and > 0.
+        2. Calibrated capacity is calculated as floor(usable_area_m2 * target_density)
+           if usable_area_m2 > 0 and target_density > 0.
+        3. Returns (None, CapacitySource.NOT_SET) if insufficient data exists.
+        4. Never divides by zero or fabricates estimates.
+        """
+        if self.manual_capacity is not None and self.manual_capacity > 0:
+            return self.manual_capacity, CapacitySource.MANUAL
+
+        if (
+            self.usable_area_m2 is not None
+            and self.usable_area_m2 > 0
+            and self.target_density_persons_per_m2 > 0
+        ):
+            import math
+            calc_cap = int(math.floor(self.usable_area_m2 * self.target_density_persons_per_m2))
+            if calc_cap > 0:
+                return calc_cap, CapacitySource.CALIBRATED
+
+        return None, CapacitySource.NOT_SET
+
+    def to_analytics_config(
+        self,
+        debounce_frames: int = 5,
+        trend_window_size: int = 10,
+        trend_min_delta: int = 2,
+    ) -> AnalyticsConfig:
+        """Convert scene profile directly to an AnalyticsConfig."""
+        cap, _ = self.derive_effective_capacity()
+        thresh = self.thresholds if self.thresholds is not None else CrowdThresholds()
+        return AnalyticsConfig(
+            capacity=cap,
+            thresholds=thresh,
+            debounce_frames=debounce_frames,
+            trend_window_size=trend_window_size,
+            trend_min_delta=trend_min_delta,
+        )
+
+    def to_dict(self) -> dict:
+        """Serialize scene profile for telemetry / configuration export."""
+        cap, cap_source = self.derive_effective_capacity()
+        return {
+            "name": self.name,
+            "manual_capacity": self.manual_capacity,
+            "usable_area_m2": self.usable_area_m2,
+            "target_density_persons_per_m2": self.target_density_persons_per_m2,
+            "effective_capacity": cap,
+            "capacity_source": cap_source.value,
+            "camera_height_m": self.camera_height_m,
+            "camera_tilt_deg": self.camera_tilt_deg,
+            "horizontal_fov_deg": self.horizontal_fov_deg,
+        }
+
+
 @dataclass(frozen=True)
 class CrowdThresholds:
     """Configurable occupancy percentage thresholds for crowd classification.

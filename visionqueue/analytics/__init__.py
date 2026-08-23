@@ -9,20 +9,24 @@ Provides modular, lightweight components for:
 
 from visionqueue.analytics.types import (
     AnalyticsConfig,
+    CapacitySource,
     CapacityState,
     CrowdAnalyticsState,
     CrowdLevel,
     CrowdThresholds,
     CrowdTrend,
+    SceneProfile,
 )
 from visionqueue.analytics.crowd import CrowdAnalyticsEngine
 
 __all__ = [
     "AnalyticsConfig",
+    "CapacitySource",
     "CapacityState",
     "CrowdAnalyticsState",
     "CrowdLevel",
     "CrowdThresholds",
     "CrowdTrend",
     "CrowdAnalyticsEngine",
+    "SceneProfile",
 ]

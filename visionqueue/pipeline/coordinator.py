@@ -12,6 +12,7 @@ from typing import Callable, List, Optional
 import numpy as np
 
 from visionqueue.alerts.engine import AlertEngine
+from visionqueue.analytics.types import AnalyticsConfig
 from visionqueue.analytics.crowd import CrowdAnalyticsEngine
 from visionqueue.camera.capture import CameraSource
 from visionqueue.camera.types import FrameData, SourceState
@@ -96,7 +97,18 @@ class CVPipeline:
         )
 
         # 5. Analytics & Alerts
-        self._analytics_engine = CrowdAnalyticsEngine(self._config.analytics)
+        analytics_cfg = self._config.analytics
+        if self._config.scene is not None and analytics_cfg.capacity is None:
+            derived_cap, _ = self._config.scene.derive_effective_capacity()
+            if derived_cap is not None:
+                analytics_cfg = AnalyticsConfig(
+                    capacity=derived_cap,
+                    thresholds=self._config.scene.thresholds if self._config.scene.thresholds is not None else analytics_cfg.thresholds,
+                    debounce_frames=analytics_cfg.debounce_frames,
+                    trend_window_size=analytics_cfg.trend_window_size,
+                    trend_min_delta=analytics_cfg.trend_min_delta,
+                )
+        self._analytics_engine = CrowdAnalyticsEngine(analytics_cfg)
         self._alert_engine = AlertEngine(self._config.alerts)
 
         # 6. Reliability & State
@@ -407,7 +419,7 @@ class CVPipeline:
         # Occupancy
         occ_percent, cap_state = self._analytics_engine.calculate_occupancy(current_headcount)
         occupancy_dict = {
-            "capacity": self._config.analytics.capacity,
+            "capacity": self._analytics_engine.capacity,
             "capacity_state": cap_state,
             "percent": occ_percent,
         }
