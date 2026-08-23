@@ -14,6 +14,7 @@ import numpy as np
 from visionqueue.alerts.engine import AlertEngine
 from visionqueue.analytics.types import AnalyticsConfig
 from visionqueue.analytics.crowd import CrowdAnalyticsEngine
+from visionqueue.analytics.scene import SceneAnalysisState, SceneAnalyzer
 from visionqueue.camera.capture import CameraSource
 from visionqueue.camera.types import FrameData, SourceState
 from visionqueue.counting.line_crossing import LineCrossingCounter
@@ -96,8 +97,12 @@ class CVPipeline:
             else None
         )
 
-        # 5. Analytics & Alerts
+        # 5. Analytics, Scene Intelligence & Alerts
         analytics_cfg = self._config.analytics
+        self._scene_analyzer = SceneAnalyzer(
+            config=self._config.scene_analyzer,
+            profile=self._config.scene,
+        )
         if self._config.scene is not None and analytics_cfg.capacity is None:
             derived_cap, _ = self._config.scene.derive_effective_capacity()
             if derived_cap is not None:
@@ -288,14 +293,24 @@ class CVPipeline:
         left_roi_ids = sorted(list(self._prev_in_roi_ids - current_in_roi))
         self._prev_in_roi_ids = current_in_roi
 
-        # 5. Occupancy & Crowd Analytics
+        # 5. Scene Intelligence & Capacity Analysis
+        scene_analysis_state = self._scene_analyzer.analyze(
+            active_tracks=[t.to_dict() for t in tracks],
+            frame_w=frame_data.width,
+            frame_h=frame_data.height,
+            timestamp=now,
+        )
+        if self._analytics_engine.capacity is None and scene_analysis_state.effective_capacity is not None:
+            self._analytics_engine.update_capacity(scene_analysis_state.effective_capacity)
+
+        # 6. Occupancy & Crowd Analytics
         analytics_state = self._analytics_engine.update(
             current_count=current_occ.current_count,
             frame_id=self._frame_sequence,
             timestamp=now,
         )
 
-        # 6. P0 Alert Engine
+        # 7. P0 Alert Engine
         active_alerts_events = self._alert_engine.update(
             crowd_level=analytics_state.crowd_level,
             camera_offline=False,
@@ -303,7 +318,7 @@ class CVPipeline:
             timestamp=now,
         )
 
-        # 7. System Reliability & Health State
+        # 8. System Reliability & Health State
         rel_state = self._reliability_manager.update(
             source_state=frame_data.source_state,
             frame_data=frame_data,
@@ -357,6 +372,7 @@ class CVPipeline:
                 "in_roi_track_ids": sorted(list(current_in_roi)),
                 "current_count": current_occ.current_count,
             },
+            "scene_analysis": scene_analysis_state.to_dict(),
             "counts": {
                 "current": current_occ.current_count,
                 "entries": self._line_crossing_counter.entries if self._line_crossing_counter else 0,
@@ -458,14 +474,20 @@ class CVPipeline:
         return self._last_state
 
     def reset_session(self) -> None:
-        """Reset tracking, counting, analytics, alerts, and reliability state."""
+        """Reset tracking, counting, analytics, alerts, scene analysis, and reliability state."""
         self._tracking_adapter.reset()
         self._occupancy_counter.reset()
         self._session_counter.reset()
         if self._line_crossing_counter is not None:
             self._line_crossing_counter.reset()
+        self._scene_analyzer.reset_history()
         self._analytics_engine.reset()
         self._alert_engine.reset()
         self._reliability_manager.reset()
         self._frame_sequence = 0
         self._last_state = None
+
+    @property
+    def scene_analyzer(self) -> SceneAnalyzer:
+        """Access the underlying SceneAnalyzer engine."""
+        return self._scene_analyzer

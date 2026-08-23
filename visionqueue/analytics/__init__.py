@@ -18,6 +18,11 @@ from visionqueue.analytics.types import (
     SceneProfile,
 )
 from visionqueue.analytics.crowd import CrowdAnalyticsEngine
+from visionqueue.analytics.scene import (
+    SceneAnalysisState,
+    SceneAnalyzer,
+    SceneAnalyzerConfig,
+)
 
 __all__ = [
     "AnalyticsConfig",
@@ -28,5 +33,8 @@ __all__ = [
     "CrowdThresholds",
     "CrowdTrend",
     "CrowdAnalyticsEngine",
+    "SceneAnalysisState",
+    "SceneAnalyzer",
+    "SceneAnalyzerConfig",
     "SceneProfile",
 ]

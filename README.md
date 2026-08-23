@@ -62,7 +62,7 @@ finally:
 
 ## Verification & Testing
 
-To run the complete test suite (224 tests):
+To run the complete test suite (249 tests):
 
 ```bash
 pytest -v

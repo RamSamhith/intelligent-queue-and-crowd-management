@@ -31,6 +31,7 @@ class CapacitySource(str, Enum):
     """Source provenance of the active capacity setting."""
     MANUAL = "MANUAL"          # Explicitly set by operator / manual capacity
     CALIBRATED = "CALIBRATED"  # Derived from physical usable area and target density
+    AUTOMATIC = "AUTOMATIC"    # Derived from perspective geometry and ground footprint
     NOT_SET = "NOT_SET"        # No capacity configured
 
 

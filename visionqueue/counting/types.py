@@ -67,6 +67,31 @@ class VirtualLine:
         import math
         return math.hypot(self.x2 - self.x1, self.y2 - self.y1)
 
+    def to_dict(self) -> dict:
+        """Serialize VirtualLine configuration to standard dictionary."""
+        return {
+            "pt1": [round(float(c), 2) for c in self.pt1],
+            "pt2": [round(float(c), 2) for c in self.pt2],
+            "entry_direction": (
+                self.entry_direction.value
+                if isinstance(self.entry_direction, CrossingDirection)
+                else str(self.entry_direction)
+            ),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "VirtualLine":
+        """Deserialize VirtualLine from configuration dictionary."""
+        pt1 = (float(data["pt1"][0]), float(data["pt1"][1]))
+        pt2 = (float(data["pt2"][0]), float(data["pt2"][1]))
+        entry_dir = data.get("entry_direction", "ENTRY")
+        entry_direction = (
+            CrossingDirection(entry_dir)
+            if isinstance(entry_dir, str) and entry_dir in CrossingDirection._value2member_map_
+            else CrossingDirection.ENTRY
+        )
+        return cls(pt1=pt1, pt2=pt2, entry_direction=entry_direction)
+
 
 @dataclass(frozen=True)
 class CrossingEvent:

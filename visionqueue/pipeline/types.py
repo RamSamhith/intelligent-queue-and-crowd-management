@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from visionqueue.alerts.types import Alert, AlertEngineConfig
 from visionqueue.analytics.types import AnalyticsConfig, CrowdAnalyticsState, SceneProfile
+from visionqueue.analytics.scene import SceneAnalyzerConfig
 from visionqueue.camera.types import CameraConfig
 from visionqueue.counting.types import LineCrossingCounts, SessionCounts, VirtualLine
 from visionqueue.detection.types import DetectorConfig
@@ -100,6 +101,7 @@ class CVPipelineConfig:
     virtual_line: Optional[VirtualLine] = None
     analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
     scene: Optional[SceneProfile] = None
+    scene_analyzer: SceneAnalyzerConfig = field(default_factory=SceneAnalyzerConfig)
     alerts: AlertEngineConfig = field(default_factory=AlertEngineConfig)
     reliability: ReliabilityConfig = field(default_factory=ReliabilityConfig)
     enable_face_detection: bool = False
