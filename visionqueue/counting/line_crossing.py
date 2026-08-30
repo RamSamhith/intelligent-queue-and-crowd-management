@@ -119,6 +119,7 @@ class _TrackLineState:
     last_point: Tuple[float, float]
     last_side: int  # +1 (left), -1 (right), 0 (unknown/on line)
     last_frame_id: int
+    first_frame_id: int
     last_crossed_direction: Optional[CrossingDirection] = None
 
 
@@ -130,6 +131,8 @@ class LineCrossingCounter:
     - Robust 2D segment intersection.
     - Direction determination (ENTRY vs EXIT) based on VirtualLine configuration.
     - Anti-chatter suppression (prevents duplicate triggers when hovering on/near the line).
+    - Configurable minimum track age to suppress crossing events for brand-new tracks
+      whose very first observation movement would otherwise trigger a false crossing.
     - Automatic history cleanup for expired tracks.
     """
 
@@ -137,15 +140,26 @@ class LineCrossingCounter:
         self,
         virtual_line: VirtualLine,
         track_max_age: int = 30,
+        min_track_age_frames: int = 0,
     ) -> None:
         """Initialize the line crossing counter.
 
         Args:
             virtual_line: Configured VirtualLine segment.
             track_max_age: Number of consecutive inactive frames before purging track history.
+            min_track_age_frames: Minimum number of frames a track must be observed before
+                it is eligible to emit a crossing event. Default 0 preserves legacy behavior.
+                Set to a small value (e.g. 1 or 2) to suppress first-frame false crossings
+                when a track is born exactly on the line and its first move happens to
+                cross the line in a single step.
         """
+        if min_track_age_frames < 0:
+            raise ValueError(
+                f"min_track_age_frames must be >= 0, got {min_track_age_frames}"
+            )
         self._line = virtual_line
         self._track_max_age = track_max_age
+        self._min_track_age_frames = min_track_age_frames
         self._track_states: Dict[int, _TrackLineState] = {}
         self._entries: int = 0
         self._exits: int = 0
@@ -218,6 +232,7 @@ class LineCrossingCounter:
                     last_point=curr_pt,
                     last_side=curr_side,
                     last_frame_id=frame_id,
+                    first_frame_id=frame_id,
                 )
                 continue
 
@@ -231,6 +246,19 @@ class LineCrossingCounter:
             )
 
             if intersects and inter_pt is not None and transition != 0:
+                # Minimum-track-age guard:
+                # Suppress crossing events for brand-new tracks whose very first
+                # trajectory segment happens to cross the line. This prevents
+                # single-frame false positives when a track is born directly on
+                # the line and its initial movement is interpreted as a crossing.
+                track_age_frames = frame_id - state.first_frame_id
+                if track_age_frames < self._min_track_age_frames:
+                    state.last_point = curr_pt
+                    if curr_side != 0:
+                        state.last_side = curr_side
+                    state.last_frame_id = frame_id
+                    continue
+
                 # Determine direction
                 if transition == 1:
                     direction = self._line.entry_direction

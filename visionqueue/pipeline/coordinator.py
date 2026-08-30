@@ -24,7 +24,7 @@ from visionqueue.detection.detector import PersonDetector
 from visionqueue.detection.face_detector import FaceDetector
 from visionqueue.pipeline.types import CVPipelineConfig, LiveState
 from visionqueue.reliability.manager import ReliabilityManager
-from visionqueue.roi.roi import ROIFilter
+from visionqueue.roi.roi import ROIFilter, validate_roi
 from visionqueue.tracking.adapter import DetectionTrackingAdapter
 
 logger = logging.getLogger(__name__)
@@ -97,6 +97,20 @@ class CVPipeline:
             else None
         )
 
+        # 4b. Queue-specific counting (optional dedicated queue ROI)
+        self._queue_counter: Optional[OccupancyCounter] = None
+        self._queue_roi_filter: Optional[ROIFilter] = None
+        if self._config.queue_roi is not None:
+            self._queue_roi_filter = ROIFilter(
+                roi=self._config.queue_roi,
+                frame_width=init_frame_w,
+                frame_height=init_frame_h,
+            )
+            self._queue_counter = OccupancyCounter(
+                roi_or_filter=self._queue_roi_filter,
+                enable_roi=True,
+            )
+
         # 5. Analytics, Scene Intelligence & Alerts
         analytics_cfg = self._config.analytics
         self._scene_analyzer = SceneAnalyzer(
@@ -142,6 +156,16 @@ class CVPipeline:
         """Access detailed per-frame diagnostic telemetry."""
         return self._last_diagnostics
 
+    @property
+    def last_state(self) -> Optional[LiveState]:
+        """Return the most recently produced LiveState snapshot.
+
+        This is updated on every `process_frame()` call AND on `stop()`, so consumers
+        reading after a clean shutdown observe the authoritative STOPPING state
+        rather than a stale LIVE snapshot from the last processed frame.
+        """
+        return self._last_state
+
     def _ensure_models_loaded(self) -> None:
         """Lazy-load vision models if not injected."""
         if self._detector is None:
@@ -159,12 +183,31 @@ class CVPipeline:
         logger.info("CVPipeline started for session %s.", self._config.session_id)
 
     def stop(self) -> None:
-        """Stop camera acquisition and pipeline execution."""
+        """Stop camera acquisition and pipeline execution.
+
+        Also refreshes `self._last_state` so consumers reading the cached state after
+        a shutdown observe the authoritative STOPPING system_state instead of a stale
+        LIVE state from the last processed frame.
+        """
         self._is_running = False
         if self._camera.is_running:
             self._camera.stop()
+        stop_time = time.time()
         # Notify reliability manager of operator stop
-        self._reliability_manager.update(operator_stop=True, timestamp=time.time())
+        rel_state = self._reliability_manager.update(operator_stop=True, timestamp=stop_time)
+        # Rebuild the cached LiveState with the authoritative STOPPING state so any
+        # consumer that reads pipeline.last_state after stop() sees the correct value.
+        self._last_state = self._build_live_state(
+            frame_id=self._frame_sequence,
+            timestamp=stop_time,
+            rel_state=rel_state,
+            detections_count=0,
+            tracks_count=0,
+            faces_count=0,
+            loop_latency_ms=0.0,
+            current_count=self._occupancy_counter.last_state.current_count if self._occupancy_counter.last_state else 0,
+            queue_people=self._queue_counter.last_state.current_count if self._queue_counter and self._queue_counter.last_state else 0,
+        )
         logger.info("CVPipeline stopped.")
 
     def __enter__(self) -> "CVPipeline":
@@ -224,6 +267,7 @@ class CVPipeline:
                 faces_count=0,
                 loop_latency_ms=(time.perf_counter() - loop_start) * 1000.0,
                 current_count=self._occupancy_counter.last_state.current_count if self._occupancy_counter.last_state else 0,
+                queue_people=self._queue_counter.last_state.current_count if self._queue_counter and self._queue_counter.last_state else 0,
             )
 
         # Frame successfully acquired
@@ -246,6 +290,16 @@ class CVPipeline:
             )
         elif self._roi_filter is not None and self._config.roi is not None:
             self._roi_filter.update_roi(self._config.roi)
+
+        # Initialize/update queue ROI filter dimensions from the first real frame
+        if self._queue_roi_filter is not None and self._config.queue_roi is not None:
+            if not self._frame_dims_confirmed:
+                validated_queue_roi = validate_roi(
+                    self._config.queue_roi, frame_data.width, frame_data.height
+                )
+                self._queue_roi_filter.update_roi(validated_queue_roi)
+            else:
+                self._queue_roi_filter.update_roi(self._config.queue_roi)
 
         # 1. Person Detection
         self._ensure_models_loaded()
@@ -293,6 +347,10 @@ class CVPipeline:
         entered_roi_ids = sorted(list(current_in_roi - self._prev_in_roi_ids))
         left_roi_ids = sorted(list(self._prev_in_roi_ids - current_in_roi))
         self._prev_in_roi_ids = current_in_roi
+
+        # 4b. Queue-specific occupancy (count people inside the configured queue ROI)
+        queue_occ_state = self._queue_counter.update(tracks, self._frame_sequence, now) if self._queue_counter else None
+        queue_people = queue_occ_state.current_count if queue_occ_state else 0
 
         # 5. Scene Intelligence & Capacity Analysis
         scene_analysis_state = self._scene_analyzer.analyze(
@@ -394,6 +452,7 @@ class CVPipeline:
                 "entries": self._line_crossing_counter.entries if self._line_crossing_counter else 0,
                 "exits": self._line_crossing_counter.exits if self._line_crossing_counter else 0,
                 "net_count": self._line_crossing_counter.net_count if self._line_crossing_counter else 0,
+                "track_instances": session_occ.approximate_unique_count,
                 "unique_session_approx": session_occ.approximate_unique_count,
             },
         }
@@ -407,6 +466,7 @@ class CVPipeline:
             faces_count=faces_count,
             loop_latency_ms=loop_latency_ms,
             current_count=current_occ.current_count,
+            queue_people=queue_people,
         )
 
     def step(self, timeout: float = 1.0) -> LiveState:
@@ -428,6 +488,7 @@ class CVPipeline:
         faces_count: int,
         loop_latency_ms: float,
         current_count: int = 0,
+        queue_people: int = 0,
     ) -> LiveState:
         """Assemble the authoritative LiveState snapshot."""
         # Counts
@@ -444,6 +505,7 @@ class CVPipeline:
 
         counts_dict = {
             "current": current_headcount,
+            "track_instances": self._session_counter.approximate_unique_count,
             "unique_session_approx": self._session_counter.approximate_unique_count,
             "entries": line_counts.entries if line_counts else 0,
             "exits": line_counts.exits if line_counts else 0,
@@ -488,6 +550,7 @@ class CVPipeline:
             detections_count=detections_count,
             tracks_count=tracks_count,
             faces_count=faces_count,
+            queue_people=queue_people,
         )
         return self._last_state
 
@@ -498,6 +561,8 @@ class CVPipeline:
         self._session_counter.reset()
         if self._line_crossing_counter is not None:
             self._line_crossing_counter.reset()
+        if self._queue_counter is not None:
+            self._queue_counter.reset()
         self._scene_analyzer.reset_history()
         self._analytics_engine.reset()
         self._alert_engine.reset()

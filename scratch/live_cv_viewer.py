@@ -47,6 +47,7 @@ from visionqueue.detection.detector import PersonDetector
 from visionqueue.detection.types import DetectorConfig
 from visionqueue.pipeline import CVPipeline, CVPipelineConfig, LiveState
 from visionqueue.reliability.types import ReliabilityConfig, SystemState
+from visionqueue.roi.types import ROIConfig
 
 
 def get_state_color(state_str: str) -> Tuple[int, int, int]:
@@ -591,7 +592,7 @@ def main() -> int:
     print("HEADCOUNT & OCCUPANCY METRICS:")
     print(f"- Final Headcount             : {state.counts.get('current', 0)}")
     print(f"- Peak Headcount in Session   : {state.crowd.get('peak_count', 0)}")
-    print(f"- Approximate Unique Visitors : {state.counts.get('unique_session_approx', 0)}")
+    print(f"- Distinct Track Instances    : {state.counts.get('track_instances', 0)}")
     print(f"- Cumulative Entries (In)     : {state.counts.get('entries', 0)}")
     print(f"- Cumulative Exits (Out)      : {state.counts.get('exits', 0)}")
     print(f"- Net Headcount (In - Out)    : {state.counts.get('net_count', 0)}")
@@ -626,7 +627,7 @@ def main() -> int:
         "counts": {
             "final_current": state.counts.get("current", 0),
             "peak_current": state.crowd.get("peak_count", 0),
-            "unique_visitors_approx": state.counts.get("unique_session_approx", 0),
+            "track_instances": state.counts.get("track_instances", 0),
             "entries": state.counts.get("entries", 0),
             "exits": state.counts.get("exits", 0),
             "net_count": state.counts.get("net_count", 0),

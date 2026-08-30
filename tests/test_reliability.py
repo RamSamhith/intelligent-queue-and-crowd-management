@@ -280,3 +280,34 @@ class TestReliabilityManager:
         assert manager.system_state == SystemState.STARTING
         assert manager.last_reliable_count == 0
         assert manager.last_state is None
+
+    def test_frame_age_ms_uses_wall_clock_consistently(self):
+        """Regression: frame_age_ms must be computed from wall-clock seconds (time.time()),
+        not from a mix of time.time() and time.perf_counter() which have different
+        epochs and are incomparable."""
+        import time
+        manager = ReliabilityManager(ReliabilityConfig(min_starting_frames=1))
+
+        # Reach LIVE state
+        frame_time = 1000.0  # Wall-clock timestamp
+        f1 = make_dummy_frame(frame_id=1, timestamp=frame_time)
+        manager.update(source_state=SourceState.RUNNING, frame_data=f1, current_count=3, timestamp=1000.0)
+
+        # Second frame acquired at t=1000.05s, processed at t=1000.06s
+        f2 = make_dummy_frame(frame_id=2, timestamp=1000.05)
+        s2 = manager.update(source_state=SourceState.RUNNING, frame_data=f2, current_count=3, timestamp=1000.06)
+
+        # Frame age = (processing_time - acquisition_time) * 1000 = (1000.06 - 1000.05) * 1000 = 10ms
+        # Use approximate comparison because float subtraction of 0.01 yields 9.999... in IEEE 754
+        assert pytest.approx(s2.performance.frame_age_ms, abs=0.001) == 10.0
+        assert s2.performance.frame_age_ms > 0
+        assert s2.performance.frame_age_ms < 100  # Reasonable bound
+
+    def test_frame_age_ms_non_negative_when_timestamps_equal(self):
+        """Regression: When processing_time == frame_time, age must be 0 not negative."""
+        manager = ReliabilityManager(ReliabilityConfig(min_starting_frames=1))
+        frame_time = 5000.0
+        f1 = make_dummy_frame(frame_id=1, timestamp=frame_time)
+        s1 = manager.update(source_state=SourceState.RUNNING, frame_data=f1, current_count=2, timestamp=frame_time)
+        # Same timestamp: age must be clamped to 0
+        assert s1.performance.frame_age_ms >= 0.0

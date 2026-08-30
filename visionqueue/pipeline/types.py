@@ -48,6 +48,7 @@ class LiveState:
     detections_count: int = 0
     tracks_count: int = 0
     faces_count: int = 0
+    queue_people: int = 0
 
     def to_dict(self) -> dict:
         """Serialize complete LiveState to JSON-compatible dictionary."""
@@ -70,6 +71,7 @@ class LiveState:
             "detections_count": self.detections_count,
             "tracks_count": self.tracks_count,
             "faces_count": self.faces_count,
+            "queue_people": self.queue_people,
         }
 
 
@@ -83,6 +85,9 @@ class CVPipelineConfig:
         tracker: ByteTrack tracker configuration.
         enable_roi: When True, restricts person counting to ROI. Default: False (V1 Whole-Frame Counting).
         roi: Region of Interest configuration (used when enable_roi is True).
+        queue_roi: Optional dedicated ROI for queue-zone counting. When set, the pipeline
+            computes a separate `queue_people` count using the same OccupancyCounter
+            abstraction. If None, queue_people is not reported.
         virtual_line: Optional virtual line for entry/exit counting.
         analytics: Occupancy and crowd analytics configuration.
         scene: Optional scene and deployment profile for effective capacity derivation.
@@ -98,6 +103,7 @@ class CVPipelineConfig:
     tracker: ByteTrackConfig = field(default_factory=ByteTrackConfig)
     enable_roi: bool = False
     roi: Optional[ROIConfig] = field(default_factory=lambda: ROIConfig(x=0, y=0, width=640, height=480))
+    queue_roi: Optional[ROIConfig] = None
     virtual_line: Optional[VirtualLine] = None
     analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
     scene: Optional[SceneProfile] = None

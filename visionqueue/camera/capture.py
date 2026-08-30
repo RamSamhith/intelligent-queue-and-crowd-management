@@ -296,7 +296,7 @@ class CameraSource:
                 continue
 
             grabbed, frame = self._cap.read()
-            now = time.perf_counter()
+            now = time.time()
 
             if not grabbed or frame is None:
                 self._consecutive_errors += 1

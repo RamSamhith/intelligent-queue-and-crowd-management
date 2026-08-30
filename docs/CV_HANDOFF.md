@@ -101,6 +101,7 @@ Every frame processed by `pipeline.step()` returns an immutable `LiveState` inst
 
   "counts": {
     "current": 6,
+    "track_instances": 24,
     "unique_session_approx": 24,
     "entries": 18,
     "exits": 12,
@@ -159,7 +160,8 @@ Every frame processed by `pipeline.step()` returns an immutable `LiveState` inst
 * `is_healthy`: `true` if and only if `system_state == "LIVE"`.
 * `is_frozen`: `true` if headcount is frozen to the last reliable value during stream/detector degradation.
 * `counts.current`: Active instantaneous person count (whole frame in V1).
-* `counts.unique_session_approx`: Approximate unique visitor count based on session track IDs.
+* `counts.track_instances`: Total distinct track IDs observed during the session (each distinct ByteTrack ID counts once). This is an internal diagnostic count, NOT a unique human count. See also `unique_session_approx` (deprecated alias).
+* `counts.unique_session_approx`: **Deprecated alias for `track_instances`.** Will be removed in a future schema-breaking release. Use `track_instances` instead. This count reflects distinct tracking IDs, not distinct persons.
 * `counts.entries` / `counts.exits`: Cumulative counts across virtual entry/exit line.
 * `occupancy.percent`: Integer percentage `(current / capacity * 100)` or `null` if capacity is `NOT_SET`.
 * `crowd.level`: Debounced crowd density category (`LOW`, `MODERATE`, `HIGH`, `CRITICAL`).
@@ -256,7 +258,7 @@ The Computer Vision engine **does not** write directly to any database. The back
    * Persist when `alerts` contains a new active or cleared alert.
    * Fields: `alert_id`, `type`, `severity`, `fired_at`, `cleared_at`, `status`, `reason`.
 4. **Session Summaries (On session termination):**
-   * Fields: `session_id`, `start_time`, `end_time`, `unique_session_approx`, `peak_count`, `peak_occupancy_percent`, `total_entries`, `total_exits`.
+    * Fields: `session_id`, `start_time`, `end_time`, `track_instances`, `peak_count`, `peak_occupancy_percent`, `total_entries`, `total_exits`.
 
 > [!IMPORTANT]
 > **Privacy Compliance Rule:**  
@@ -274,7 +276,7 @@ The Computer Vision engine **does not** write directly to any database. The back
 | **Crowd Trend Arrow** | `crowd.trend` | `str` | `"INCREASING"` ($\uparrow$), `"STABLE"` ($\leftrightarrow$), `"DECREASING"` ($\downarrow$) |
 | **Total In / Entries** | `counts.entries` | `int` | Cumulative count |
 | **Total Out / Exits** | `counts.exits` | `int` | Cumulative count |
-| **Approximate Visitors**| `counts.unique_session_approx` | `int` | Session unique count |
+| **Track Instances** | `counts.track_instances` | `int` | Distinct tracking IDs observed |
 | **System Status Indicator** | `system_state` | `str` | `"LIVE"` (Green), `"DEGRADED"` (Yellow), `"OFFLINE"` (Red) |
 | **Camera Connectivity** | `camera_state` | `str` | `"CONNECTED"`, `"RECONNECTING"`, `"OFFLINE"` |
 | **Live FPS Counter** | `performance.processing_fps` | `float` | e.g. `29.4` |
@@ -399,7 +401,7 @@ pytest -v
 
 ## 15. Known System Boundaries & Limitations
 
-1. **Session Unique Count Approximation**: `counts.unique_session_approx` counts unique track IDs generated in the session. If a person exits the frame for longer than `track_buffer` (30 frames) and re-enters, a new ID is assigned.
+1. **Track Instances ≠ Unique Humans**: `counts.track_instances` counts distinct ByteTrack IDs observed during the session. A single person who exits and re-enters (after the track buffer expires) will generate a new track ID and be counted again. This metric is a diagnostic indicator of tracker activity — it does NOT represent unique human visitors. If a person re-enters within the track buffer window, the same track ID is retained and the count is not inflated.
 2. **Camera Occlusion**: Extreme physical occlusion (e.g. a person completely hidden behind a pillar for $>1\text{ second}$) will cause track termination upon buffer expiration.
 3. **Lighting & Camera Angle**: Optimal detection requires overhead or 30–60° angled mounting with adequate illumination.
 

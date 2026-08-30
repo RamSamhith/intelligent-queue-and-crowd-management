@@ -115,7 +115,7 @@ def draw_hud(
     )
     cv2.putText(
         annotated,
-        f"Unique Seen: {state.counts['unique_session_approx']} | Peak: {state.crowd.get('peak_count', 0)}",
+        f"Distinct Track Instances: {state.counts.get('track_instances', 0)} | Peak: {state.crowd.get('peak_count', 0)}",
         (10, 52),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.55,
@@ -301,7 +301,7 @@ def run_acceptance_test(
                 "entries": state.counts["entries"],
                 "exits": state.counts["exits"],
                 "net_count": state.counts["net_count"],
-                "unique_approx": state.counts["unique_session_approx"],
+                "track_instances": state.counts.get("track_instances", 0),
                 # 15 Required Diagnostic telemetry fields
                 "detections": diag.get("detections", []),
                 "detections_count": diag.get("detections_count", state.detections_count),
@@ -343,7 +343,7 @@ def run_acceptance_test(
                     f"{state.crowd['level']:<8} | "
                     f"{state.counts['entries']:3d} | "
                     f"{state.counts['exits']:3d} | "
-                    f"{state.counts['unique_session_approx']:4d} | "
+                    f"{state.counts.get('track_instances', 0):4d} | "
                     f"{state.performance.inference_latency_ms:7.2f} | "
                     f"{state.performance.frame_age_ms:6.1f}",
                     flush=True,
@@ -403,7 +403,7 @@ def run_acceptance_test(
     print(f"  * Total Entries Observed : {last_entry.get('entries', 0)}")
     print(f"  * Total Exits Observed   : {last_entry.get('exits', 0)}")
     print(f"  * Net Count (In - Out)   : {last_entry.get('net_count', 0)}")
-    print(f"  * Approx Unique Visitors : {last_entry.get('unique_approx', 0)}")
+    print(f"  * Distinct Track Instances : {last_entry.get('track_instances', 0)}")
     print(f"  * Final Crowd Level      : {last_entry.get('crowd_level', 'N/A')}")
     print(f"  * Active Alerts Fired    : {len(last_entry.get('active_alerts', []))}")
     print("-" * 70)

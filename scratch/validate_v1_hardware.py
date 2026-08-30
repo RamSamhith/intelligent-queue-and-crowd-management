@@ -171,7 +171,7 @@ def main():
     print(f"  * Total Entries Observed : {state.counts['entries']}")
     print(f"  * Total Exits Observed   : {state.counts['exits']}")
     print(f"  * Net Count (Entries-Exit: {state.counts['net_count']}")
-    print(f"  * Approx Unique Visitors : {state.counts['unique_session_approx']}")
+    print(f"  * Distinct Track Instances: {state.counts.get('track_instances', 0)}")
     print(f"  * Final Crowd Level      : {state.crowd['level']}")
     print(f"  * Final Occupancy Pct    : {state.occupancy['percent']}%")
     print(f"  * Alert Count Fired      : {active_alerts_fired}")

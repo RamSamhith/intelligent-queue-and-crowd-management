@@ -145,7 +145,7 @@ def main():
     if frame_ages:
         print(f"Frame Age (Staleness)    : Avg={np.mean(frame_ages):.2f} ms | Max={np.max(frame_ages):.2f} ms")
     print(f"Final System State       : {state.system_state.value}")
-    print(f"Final Count / Approx Seen: Current={state.counts['current']} | Unique Approx={state.counts['unique_session_approx']}")
+    print(f"Final Count / Track Instances: Current={state.counts['current']} | Track Instances={state.counts.get('track_instances', 0)}")
     print("========================================================\n")
 
     return 0

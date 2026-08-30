@@ -143,12 +143,10 @@ class ReliabilityManager:
         fps = frame_data.fps if frame_data is not None else 0.0
         frame_age_ms = 0.0
         if frame_data is not None and frame_data.timestamp > 0:
-            # Determine if frame timestamp is from time.perf_counter() or time.time()
-            if abs(timestamp - frame_data.timestamp) < 100000.0:
-                frame_age_ms = max(0.0, (timestamp - frame_data.timestamp) * 1000.0)
-            else:
-                import time as _time
-                frame_age_ms = max(0.0, (_time.perf_counter() - frame_data.timestamp) * 1000.0)
+            # Both frame_data.timestamp and timestamp MUST be wall-clock seconds (time.time())
+            # so subtraction is meaningful. We clamp to >= 0 because out-of-order acquisition
+            # can occasionally produce a slightly negative age.
+            frame_age_ms = max(0.0, (timestamp - frame_data.timestamp) * 1000.0)
 
         # 4. Evaluate Vision & Detection Health
         if not detection_success:

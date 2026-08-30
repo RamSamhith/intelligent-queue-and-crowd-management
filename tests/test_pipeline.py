@@ -429,8 +429,8 @@ class TestROIFrameDimensions:
         assert pipeline._roi_filter.frame_height == 480
 
     def test_camera_config_dims_pre_confirm(self, mock_detector):
-        """When CameraConfig explicitly provides width/height, the pipeline
-        must mark dims as already confirmed without waiting for a FrameData.
+        """When CameraConfig explicitly provides width/height, the pipeline must
+        mark dims as already confirmed without waiting for a FrameData.
         """
         from visionqueue.camera.types import CameraConfig
         roi = ROIConfig(x=0, y=0, width=1280, height=720)
@@ -446,4 +446,119 @@ class TestROIFrameDimensions:
         assert pipeline._frame_dims_confirmed is True
         assert pipeline._roi_filter.frame_width == 1280
         assert pipeline._roi_filter.frame_height == 720
+
+
+# ============================================================
+# Tests: Frame-Age Clock Consistency (Phase A regression)
+# ============================================================
+
+class TestFrameAgeClockConsistency:
+    """Verify frame_age_ms uses a single wall-clock (time.time()) consistently.
+
+    Root cause that was fixed: the camera capture used time.perf_counter() for
+    FrameData.timestamp while the coordinator/reliability used time.time().
+    These two clocks have different epochs and are NOT directly comparable.
+    The reliability manager's heuristic (`abs(timestamp - frame_data.timestamp) < 100000`)
+    silently misclassified the timestamp, producing bogus frame_age_ms values
+    on the order of 1e9 ms (driving the system straight into DEGRADED).
+    """
+
+    @pytest.fixture
+    def mock_detector(self):
+        mock = MagicMock()
+        mock.detect_timed.return_value = ([], 10.0)
+        mock.detect.return_value = []
+        return mock
+
+    def test_frame_age_is_meaningful_with_wall_clock_timestamps(self, mock_detector):
+        """When FrameData.timestamp uses time.time() (wall-clock seconds since epoch),
+        and the pipeline timestamp is also from time.time(), frame_age_ms must be
+        the realistic pipeline latency in milliseconds (≈ tens of ms), not
+        1.7e9 ms.
+        """
+        import time
+        pipeline = CVPipeline(config=CVPipelineConfig(
+            reliability=ReliabilityConfig(min_starting_frames=1, max_frame_age_ms=1000.0),
+        ), detector=mock_detector)
+
+        # Simulate a frame whose timestamp was just captured (~ current wall-clock)
+        current_wall = time.time()
+        f1 = make_frame_data(frame_id=1, timestamp=current_wall)
+        # Process it ~10ms later
+        s1 = pipeline.process_frame(f1, timestamp=current_wall + 0.010)
+
+        # Frame age must be small (~10ms), not millions of ms
+        assert s1.performance.frame_age_ms < 100.0, (
+            f"Frame age must be a realistic pipeline latency, got {s1.performance.frame_age_ms}ms. "
+            "This suggests a clock-mismatch bug (time.perf_counter vs time.time)."
+        )
+        assert s1.performance.frame_age_ms >= 0.0
+        assert s1.system_state != SystemState.DEGRADED, (
+            f"System should not be DEGRADED due to clock-mismatch; "
+            f"frame_age_ms={s1.performance.frame_age_ms}ms."
+        )
+
+    def test_frame_age_clamped_to_zero_on_equal_timestamps(self, mock_detector):
+        """When frame_time == process_time, age must be exactly 0 (not negative)."""
+        pipeline = CVPipeline(config=CVPipelineConfig(
+            reliability=ReliabilityConfig(min_starting_frames=1, max_frame_age_ms=500.0),
+        ), detector=mock_detector)
+
+        ts = 12345.678
+        f1 = make_frame_data(frame_id=1, timestamp=ts)
+        s1 = pipeline.process_frame(f1, timestamp=ts)
+        assert s1.performance.frame_age_ms == 0.0
+
+
+# ============================================================
+# Tests: pipeline.stop() updates LiveState (Phase A regression)
+# ============================================================
+
+class TestPipelineStopUpdatesLiveState:
+    """Verify that calling pipeline.stop() updates the cached LiveState so
+    consumers reading pipeline.last_state after shutdown observe the
+    authoritative STOPPING system_state rather than a stale LIVE frame.
+    """
+
+    @pytest.fixture
+    def mock_detector(self):
+        mock = MagicMock()
+        mock.detect_timed.return_value = ([], 10.0)
+        mock.detect.return_value = []
+        return mock
+
+    def test_stop_updates_last_state_to_stopping(self, mock_detector):
+        pipeline = CVPipeline(config=CVPipelineConfig(
+            reliability=ReliabilityConfig(min_starting_frames=1),
+        ), detector=mock_detector)
+
+        # 1. Reach LIVE state
+        f1 = make_frame_data(frame_id=1, timestamp=1.0)
+        f2 = make_frame_data(frame_id=2, timestamp=1.033)
+        pipeline.process_frame(f1, timestamp=1.01)
+        s_live = pipeline.process_frame(f2, timestamp=1.04)
+        assert s_live.system_state == SystemState.LIVE
+        assert pipeline.last_state.system_state == SystemState.LIVE
+
+        # 2. Call stop() — last_state must now be STOPPING
+        pipeline.stop()
+        assert pipeline.last_state is not None
+        assert pipeline.last_state.system_state == SystemState.STOPPING, (
+            "pipeline.last_state must reflect STOPPING after stop() is called. "
+            "Without this, downstream consumers reading the cached state after shutdown "
+            "see stale LIVE data."
+        )
+
+    def test_stop_idempotent(self, mock_detector):
+        """Calling stop() multiple times must not raise."""
+        pipeline = CVPipeline(config=CVPipelineConfig(
+            reliability=ReliabilityConfig(min_starting_frames=1),
+        ), detector=mock_detector)
+
+        f1 = make_frame_data(frame_id=1, timestamp=1.0)
+        pipeline.process_frame(f1, timestamp=1.01)
+
+        # Should not raise
+        pipeline.stop()
+        pipeline.stop()
 
