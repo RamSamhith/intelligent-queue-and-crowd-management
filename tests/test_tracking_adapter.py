@@ -81,8 +81,9 @@ def test_multiple_people_separate_track_ids(adapter):
 
 def test_confidence_changes(adapter):
     """Track handles confidence changes."""
-    # High confidence
-    tracks = adapter.update([make_detection(100, 100, 200, 300, 0.9)])
+    # High confidence (establish track)
+    for _ in range(3):
+        tracks = adapter.update([make_detection(100, 100, 200, 300, 0.9)])
     tid_high = tracks[0].track_id
 
     # Low confidence

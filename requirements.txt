@@ -1,10 +1,20 @@
 # VisionQueue Computer Vision Subsystem Dependencies
 # Python 3.11+
+#
+# NOTE: torch MUST be installed from the PyTorch CUDA wheel index
+# (https://download.pytorch.org/whl/cu128) — PyPI's default torch wheel is
+# CPU-only and does not ship the cuBLAS / cuDNN / cuRT / nvJitLink DLLs that
+# onnxruntime-gpu's CUDAExecutionProvider requires at runtime. The CUDA
+# runtime DLLs are supplied by torch's `lib/` directory, which is registered
+# with the Windows DLL loader by visionqueue/detection/detector.py.
+# See README.md "Installation" for the exact pip command.
 
 # Core Computer Vision & Deep Learning Runtime
 numpy>=1.26.0,<3.0.0
 opencv-python>=4.8.0,<6.0.0
 onnxruntime-gpu>=1.18.0,<2.0.0
+torch>=2.11.0+cu128
 
 # Testing & Quality Assurance
 pytest>=8.0.0
+scipy>=1.11.0,<2.0.0

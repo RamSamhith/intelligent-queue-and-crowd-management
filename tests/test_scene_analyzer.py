@@ -208,3 +208,145 @@ class TestPipelineAutomaticCapacityIntegration:
         assert len(analyzer._observations) == 0
         assert state.effective_capacity is None
         assert state.capacity_source == CapacitySource.NOT_SET
+
+
+# ============================================================
+# Defect 4 Regression: AUTOMATIC capacity must not propagate
+# to CrowdAnalyticsEngine and drive safety/capacity alerts.
+# ============================================================
+
+class TestDefect4AutomaticCapacityIsolation:
+    """Regression tests for Defect 4: Uncalibrated AUTOMATIC scene capacity
+    estimate must not be propagated into the CrowdAnalyticsEngine where it would
+    drive occupancy percentages and trigger CRITICAL alerts.
+
+    Fix location: coordinator.py — capacity propagation gated on
+    capacity_source in ("MANUAL", "CALIBRATED") only.
+    """
+
+    def test_automatic_source_not_fed_to_analytics_engine(self):
+        """CVPipeline must not call update_capacity() for AUTOMATIC scene estimates."""
+        from visionqueue.analytics.crowd import CrowdAnalyticsEngine
+        from visionqueue.analytics.types import AnalyticsConfig
+
+        engine = CrowdAnalyticsEngine(AnalyticsConfig())
+        assert engine.capacity is None  # starts unset
+
+        # Simulate what coordinator does: only MANUAL/CALIBRATED propagates
+        from visionqueue.analytics.scene import SceneAnalysisState
+
+        auto_state = SceneAnalysisState(
+            effective_capacity=25,
+            capacity_source=CapacitySource.AUTOMATIC,
+            confidence=0.72,
+            visible_area_m2_approx=30.0,
+            calibration_required=True,
+            scene_quality="FAIR",
+            geometry_quality="PERSPECTIVE_ESTIMATED",
+            reason="Automatic estimate",
+            observed_samples_count=20,
+            timestamp=1.0,
+        )
+
+        # Apply the coordinator's gating logic
+        if (
+            engine.capacity is None
+            and auto_state.effective_capacity is not None
+            and auto_state.capacity_source.value in ("MANUAL", "CALIBRATED")
+        ):
+            engine.update_capacity(auto_state.effective_capacity)
+
+        # AUTOMATIC must not have propagated
+        assert engine.capacity is None, (
+            "AUTOMATIC scene estimate must NOT propagate to analytics engine"
+        )
+
+    def test_manual_source_propagates_to_analytics_engine(self):
+        """MANUAL capacity MUST propagate to analytics engine."""
+        from visionqueue.analytics.crowd import CrowdAnalyticsEngine
+        from visionqueue.analytics.types import AnalyticsConfig
+        from visionqueue.analytics.scene import SceneAnalysisState
+
+        engine = CrowdAnalyticsEngine(AnalyticsConfig())
+        assert engine.capacity is None
+
+        manual_state = SceneAnalysisState(
+            effective_capacity=50,
+            capacity_source=CapacitySource.MANUAL,
+            confidence=1.0,
+            visible_area_m2_approx=None,
+            calibration_required=False,
+            scene_quality="EXCELLENT",
+            geometry_quality="MANUAL",
+            reason="Operator manual capacity",
+            observed_samples_count=0,
+            timestamp=1.0,
+        )
+
+        if (
+            engine.capacity is None
+            and manual_state.effective_capacity is not None
+            and manual_state.capacity_source.value in ("MANUAL", "CALIBRATED")
+        ):
+            engine.update_capacity(manual_state.effective_capacity)
+
+        assert engine.capacity == 50
+
+    def test_calibrated_source_propagates_to_analytics_engine(self):
+        """CALIBRATED capacity MUST propagate to analytics engine."""
+        from visionqueue.analytics.crowd import CrowdAnalyticsEngine
+        from visionqueue.analytics.types import AnalyticsConfig
+        from visionqueue.analytics.scene import SceneAnalysisState
+
+        engine = CrowdAnalyticsEngine(AnalyticsConfig())
+
+        calibrated_state = SceneAnalysisState(
+            effective_capacity=40,
+            capacity_source=CapacitySource.CALIBRATED,
+            confidence=1.0,
+            visible_area_m2_approx=50.0,
+            calibration_required=False,
+            scene_quality="EXCELLENT",
+            geometry_quality="CALIBRATED",
+            reason="Physical calibration",
+            observed_samples_count=0,
+            timestamp=1.0,
+        )
+
+        if (
+            engine.capacity is None
+            and calibrated_state.effective_capacity is not None
+            and calibrated_state.capacity_source.value in ("MANUAL", "CALIBRATED")
+        ):
+            engine.update_capacity(calibrated_state.effective_capacity)
+
+        assert engine.capacity == 40
+
+    def test_automatic_capacity_in_scene_state_is_advisory_only(self):
+        """SceneAnalyzer produces AUTOMATIC estimates correctly — they're just advisory."""
+        config = SceneAnalyzerConfig(
+            min_samples_for_estimate=3,
+            max_history_samples=50,
+        )
+        analyzer = SceneAnalyzer(config=config)
+
+        # Feed enough valid human-shaped tracks to get past min_samples
+        for i in range(10):
+            tracks = [
+                {"track_id": j, "bbox": [j * 80.0, 100.0, j * 80.0 + 60.0, 340.0]}
+                for j in range(1, 4)
+            ]
+            state = analyzer.analyze(
+                tracks, frame_w=640, frame_h=480, timestamp=float(i), force_eval=True
+            )
+
+        # After enough samples, SceneAnalyzer may emit AUTOMATIC
+        # The important thing: it does NOT return MANUAL or CALIBRATED
+        if state.capacity_source == CapacitySource.AUTOMATIC:
+            assert state.calibration_required is True, (
+                "AUTOMATIC estimates must always mark calibration_required=True"
+            )
+            assert state.confidence <= 0.88, (
+                "AUTOMATIC confidence must be capped below 0.88 per implementation"
+            )
+

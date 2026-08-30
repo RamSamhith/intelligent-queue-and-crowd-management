@@ -6,6 +6,7 @@ Pure NumPy implementation.
 from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
+from scipy.optimize import linear_sum_assignment as scipy_lsa
 
 
 def iou_distance(tracks_tlbr: NDArray[np.float32], detections_tlbr: NDArray[np.float32]) -> NDArray[np.float32]:
@@ -75,83 +76,17 @@ def fuse_score(distance: NDArray[np.float32], detections: NDArray[np.float32]) -
 
 def linear_sum_assignment(cost_matrix: NDArray[np.float32]) -> tuple[NDArray[np.int32], NDArray[np.int32]]:
     """
-    Hungarian algorithm (Jonker-Volgenant) for linear sum assignment.
-    Pure NumPy implementation for small matrices (typical tracking: <100 tracks/detections).
-
-    Returns:
-        row_indices, col_indices of optimal assignment
+    Hungarian algorithm for linear sum assignment using scipy.optimize.
     """
     if cost_matrix.size == 0:
         return np.array([], dtype=np.int32), np.array([], dtype=np.int32)
-
-    n_rows, n_cols = cost_matrix.shape
-    n = max(n_rows, n_cols)
-
-    # Pad to square
-    if n_rows != n_cols:
-        padded = np.full((n, n), 1e6, dtype=np.float32)
-        padded[:n_rows, :n_cols] = cost_matrix
-        cost_matrix = padded
-
-    # Jonker-Volgenant algorithm (shortest augmenting path)
-    # Based on scipy's implementation but simplified
-    u = np.zeros(n, dtype=np.float32)
-    v = np.zeros(n, dtype=np.float32)
-    match_row = np.full(n, -1, dtype=np.int32)
-    match_col = np.full(n, -1, dtype=np.int32)
-
-    for i in range(n):
-        # Dijkstra-like shortest augmenting path
-        dist = cost_matrix[i] - u[i] - v
-        prev = np.full(n, -1, dtype=np.int32)
-        visited = np.zeros(n, dtype=bool)
-
-        marked_col = -1
-        while True:
-            # Find unvisited column with minimum dist
-            unvisited = ~visited
-            if not np.any(unvisited):
-                break
-            min_idx = np.argmin(np.where(unvisited, dist, np.inf))
-            if dist[min_idx] >= 1e6:
-                break
-
-            visited[min_idx] = True
-
-            if match_col[min_idx] == -1:
-                marked_col = min_idx
-                break
-
-            # Update distances via matched row
-            row = match_col[min_idx]
-            new_dist = cost_matrix[row] - u[row] - v
-            better = new_dist < dist
-            dist[better] = new_dist[better]
-            prev[better] = min_idx
-
-        if marked_col == -1:
-            continue
-
-        # Augment path
-        col = marked_col
-        while col != -1:
-            row = prev[col]
-            if row == -1:
-                row = i
-            next_col = match_row[row]
-            match_row[row] = col
-            match_col[col] = row
-            col = next_col
-
-    # Extract assignments for original matrix size
-    row_indices = []
-    col_indices = []
-    for i in range(n_rows):
-        if match_row[i] != -1 and match_row[i] < n_cols:
-            row_indices.append(i)
-            col_indices.append(match_row[i])
-
-    return np.array(row_indices, dtype=np.int32), np.array(col_indices, dtype=np.int32)
+        
+    # We replace any inf/1e6 costs with a high value but not inf
+    # to allow scipy to solve the assignment gracefully
+    cleaned_cost = np.where(cost_matrix >= 1e6, 1e6, cost_matrix)
+    
+    row_ind, col_ind = scipy_lsa(cleaned_cost)
+    return row_ind.astype(np.int32), col_ind.astype(np.int32)
 
 
 def matching(

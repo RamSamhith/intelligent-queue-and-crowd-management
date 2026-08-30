@@ -75,6 +75,7 @@ class ByteTrack:
             List of track dicts: {track_id, bbox: [x1,y1,x2,y2], confidence}
         """
         self.frame_id += 1
+        self.removed_tracks.clear()  # Prevent indefinite accumulation
 
         # Diagnostic collectors
         tracks_created_diag: List[Dict[str, Any]] = []
@@ -232,9 +233,8 @@ class ByteTrack:
             # Update unmatched lists - map back to strack_pool indices
             newly_matched_pool = np.array([r_pool_indices[i] for i in matches_low[:, 0]], dtype=np.int32) if len(matches_low) > 0 else np.array([], dtype=np.int32)
             u_track = np.setdiff1d(u_track, newly_matched_pool)
-            u_det_low = u_det_low  # unused low detections
         else:
-            u_det_low = np.arange(len(dets_low), dtype=np.int32)
+            pass  # Low detections not used beyond stage 2
 
         # ============================================================
         # Step 4: Handle unconfirmed tracks (NEW state) that are still unmatched
@@ -243,19 +243,33 @@ class ByteTrack:
         unconfirmed = [strack_pool[i] for i in unconfirmed_pool_indices]
         unconfirmed_tlbr = np.array([t.tlbr for t in unconfirmed], dtype=np.float32) if unconfirmed else np.empty((0, 4), dtype=np.float32)
 
-        if len(unmatched_high_dets) > 0 and len(unconfirmed) > 0:
-            det_tlbr = unmatched_high_dets[:, :4]
-            matches, u_unconfirmed, u_det = matching(
-                unconfirmed_tlbr, det_tlbr,
-                thresh=0.7,  # Max distance 0.7 (IoU >= 0.3)
-                detections_full=None
-            )
+        u_unconfirmed: list[int] = []
 
-            for track_idx, det_idx in matches:
-                track = unconfirmed[track_idx]
-                det = unmatched_high_dets[det_idx]
-                det_tlwh = self.kf.tlbr_to_tlwh(det[:4])
-                track.update(det_tlwh, float(det[4]), self.frame_id)
+        if len(unconfirmed) > 0:
+            if len(unmatched_high_dets) > 0:
+                det_tlbr = unmatched_high_dets[:, :4]
+                matches, u_unconfirmed_arr, u_det = matching(
+                    unconfirmed_tlbr, det_tlbr,
+                    thresh=0.7,  # Max distance 0.7 (IoU >= 0.3)
+                    detections_full=None
+                )
+
+                for track_idx, det_idx in matches:
+                    track = unconfirmed[track_idx]
+                    det = unmatched_high_dets[det_idx]
+                    det_tlwh = self.kf.tlbr_to_tlwh(det[:4])
+                    track.update(det_tlwh, float(det[4]), self.frame_id)
+
+                # Keep unmatched high dets for new track creation
+                if len(u_det) > 0:
+                    unmatched_high_dets = unmatched_high_dets[u_det]
+                else:
+                    unmatched_high_dets = np.empty((0, 6), dtype=np.float32)
+
+                u_unconfirmed = list(u_unconfirmed_arr)
+            else:
+                # No high-conf detections available, so all unconfirmed tracks are unmatched
+                u_unconfirmed = list(range(len(unconfirmed)))
 
             # Remove unmatched unconfirmed tracks
             for idx in u_unconfirmed:
@@ -271,8 +285,6 @@ class ByteTrack:
                     "tlbr": list(map(float, unconfirmed[idx].tlbr)),
                     "end_frame": self.frame_id,
                 })
-
-            unmatched_high_dets = unmatched_high_dets[u_det] if len(u_det) > 0 else np.empty((0, 6), dtype=np.float32)
 
         # ============================================================
         # Step 5: Initialize new tracks from remaining high-confidence detections

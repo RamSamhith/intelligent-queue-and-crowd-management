@@ -21,6 +21,48 @@ LiveState (JSON) ◄── Reliability Watchdog ◄── Alert Engine ◄──
 
 ---
 
+## Installation
+
+**Prerequisites**
+- Python 3.11 or 3.12 (3.11 recommended for the currently validated matrix)
+- Windows 10/11 with an NVIDIA GPU and an up-to-date NVIDIA driver
+  (Driver ≥ 525 recommended; CUDA 12.x runtime is supplied by the torch wheel
+  — **the full CUDA Toolkit is not required**)
+
+**Step 1 — Create a virtual environment and install PyTorch (CUDA 12.8 build)**
+
+```bash
+python -m venv .venv
+.venv\Scripts\python -m pip install --upgrade pip
+
+# torch MUST come from the PyTorch CUDA wheel index.
+# PyPI's default torch is CPU-only and will not enable CUDAExecutionProvider.
+.venv\Scripts\python -m pip install torch==2.11.0+cu128 \
+    --index-url https://download.pytorch.org/whl/cu128
+```
+
+**Step 2 — Install the remaining VisionQueue dependencies**
+
+```bash
+.venv\Scripts\python -m pip install -r requirements.txt
+```
+
+**Step 3 — Verify the CUDA environment**
+
+```bash
+.venv\Scripts\python -c "import onnxruntime as ort; print(ort.get_available_providers())"
+```
+
+Expected output:
+```
+['TensorrtExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
+```
+
+If `CUDAExecutionProvider` is missing from the list, the torch CUDA wheel
+did not install correctly — re-run Step 1 from the PyTorch CUDA index.
+
+---
+
 ## 5-Minute Developer Quickstart
 
 ```python
@@ -62,7 +104,7 @@ finally:
 
 ## Verification & Testing
 
-To run the complete test suite (249 tests):
+To run the complete test suite (265 tests):
 
 ```bash
 pytest -v

@@ -1,5 +1,3 @@
-
-````md
 # AGENTS.md
 # Intelligent Queue & Crowd Management
 # RamSamhith — Computer Vision & System Integration
@@ -1235,8 +1233,3 @@ The final objective is:
 
 The best reliable, secure, maintainable, tested, project-grade implementation
 that satisfies the actual Intelligent Queue & Crowd Management requirements.
-
-```
-
-**After saving it:** don't start coding yet. Open a fresh Antigravity Agent chat and ask it to read **`AGENTS.md` + everything under `docs/` + the repository**, then produce the project/RamSamhith readiness report **without modifying anything**. That is the final sanity check before implementation.
-```

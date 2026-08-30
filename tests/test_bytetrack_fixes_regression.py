@@ -94,9 +94,13 @@ class TestByteTrackFixesRegression:
         """Verify that rapid frame-to-frame confidence oscillations
         (high -> low -> high -> low) maintain exactly one track ID.
         """
+        # Establish track first (3 frames of high confidence)
+        for _ in range(3):
+            tracker.update(make_det(100, 100, 200, 300, conf=0.85))
+            
         oscillating_confs = [0.85, 0.35, 0.78, 0.28, 0.92, 0.42, 0.65, 0.38, 0.88, 0.48]
         seen_ids = set()
-
+    
         for f_idx, conf in enumerate(oscillating_confs):
             out = tracker.update(make_det(100 + f_idx, 100, 200 + f_idx, 300, conf=conf))
             assert len(out) == 1, f"Frame {f_idx+1} (conf={conf}) must output 1 track"

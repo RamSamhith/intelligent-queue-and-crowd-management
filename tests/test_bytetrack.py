@@ -158,17 +158,22 @@ def test_high_confidence_association(tracker):
 
 def test_low_confidence_recovery(tracker):
     """Test that low-confidence detections recover occluded tracks."""
-    # Frame 1: High confidence - creates track
+    # Frame 1: High confidence - creates track (hit=1, state=NEW)
     det1 = make_detection(100, 100, 200, 300, conf=0.9)
     tracks1 = tracker.update(det1)
     tid = tracks1[0]["track_id"]
 
-    # Frame 2: High confidence - maintains track
+    # Frame 2: High confidence - maintains track (hit=2, state=NEW)
     det2 = make_detection(102, 102, 202, 302, conf=0.9)
     tracks2 = tracker.update(det2)
     assert tracks2[0]["track_id"] == tid
+    
+    # Frame 2.5: High confidence - maintains track (hit=3, state=TRACKED)
+    det25 = make_detection(103, 103, 203, 303, conf=0.9)
+    tracks25 = tracker.update(det25)
+    assert tracks25[0]["track_id"] == tid
 
-    # Frame 3: Low confidence (occlusion) - should still associate
+    # Frame 3: Low confidence (occlusion) - should still associate because it's TRACKED
     det3 = make_detection(105, 105, 205, 305, conf=0.2)  # Low confidence
     tracks3 = tracker.update(det3)
     assert len(tracks3) == 1
@@ -337,8 +342,9 @@ def test_deterministic_behavior():
 
 def test_synthetic_sequence():
     """
-    Frame 1 → person A
-    Frame 2 → person A
+    Frame 1 → person A (NEW)
+    Frame 2 → person A (NEW)
+    Frame 2.5 → person A (TRACKED)
     Frame 3 → person A with lower confidence
     Frame 4 → person A recovered
     Frame 5 → person disappears
@@ -357,16 +363,23 @@ def test_synthetic_sequence():
 
     track_ids = []
 
-    # Frame 1: Person A appears (high confidence)
+    # Frame 1: Person A appears (high confidence, hit=1)
     det1 = make_detection(100, 100, 200, 300, conf=0.9)
     tracks = tracker.update(det1)
     assert len(tracks) == 1
     track_ids.append(tracks[0]["track_id"])
     tid = tracks[0]["track_id"]
 
-    # Frame 2: Person A continues (high confidence)
+    # Frame 2: Person A continues (high confidence, hit=2)
     det2 = make_detection(102, 102, 202, 302, conf=0.9)
     tracks = tracker.update(det2)
+    assert len(tracks) == 1
+    track_ids.append(tracks[0]["track_id"])
+    assert tracks[0]["track_id"] == tid
+
+    # Frame 2.5: Person A continues (high confidence, hit=3, state=TRACKED)
+    det25 = make_detection(103, 103, 203, 303, conf=0.9)
+    tracks = tracker.update(det25)
     assert len(tracks) == 1
     track_ids.append(tracks[0]["track_id"])
     assert tracks[0]["track_id"] == tid
@@ -471,6 +484,31 @@ def test_matching_basic():
     assert matches[0, 0] == 0 and matches[0, 1] == 0
     assert len(unmatched_t) == 0
     assert len(unmatched_d) == 0
+
+
+def test_bytetrack_new_track_leak(tracker):
+    """Test that unmatched NEW tracks are removed even when there are no high-confidence detections."""
+    # Frame 1: One high confidence detection, creates a NEW track
+    det1 = make_detection(100, 100, 200, 300, conf=0.9)
+    tracks1 = tracker.update(det1)
+    
+    # Track is NEW, but this implementation outputs NEW tracks.
+    assert len(tracks1) == 1
+    tid = tracks1[0]["track_id"]
+    
+    # Frame 2: Empty frame
+    det2 = np.empty((0, 6), dtype=np.float32)
+    tracks2 = tracker.update(det2)
+    
+    assert len(tracks2) == 0
+    
+    # Robust test: Check that the track is not leaked in tracked_tracks
+    active_ids = {t.track_id for t in tracker.tracked_tracks}
+    assert tid not in active_ids
+    
+    # We also expect it to be marked as removed during frame 2 processing
+    removed_ids = {t.track_id for t in tracker.removed_tracks}
+    assert tid in removed_ids
 
 
 # ============================================================

@@ -223,6 +223,7 @@ class CVPipeline:
                 tracks_count=0,
                 faces_count=0,
                 loop_latency_ms=(time.perf_counter() - loop_start) * 1000.0,
+                current_count=self._occupancy_counter.last_state.current_count if self._occupancy_counter.last_state else 0,
             )
 
         # Frame successfully acquired
@@ -300,33 +301,48 @@ class CVPipeline:
             frame_h=frame_data.height,
             timestamp=now,
         )
-        if self._analytics_engine.capacity is None and scene_analysis_state.effective_capacity is not None:
+        # 5b. Propagate scene capacity to analytics — MANUAL/CALIBRATED only.
+        # AUTOMATIC (monocular perspective estimate) must NOT be used as an authoritative
+        # physical/safety capacity because it is uncalibrated and can trigger spurious
+        # critical capacity alerts. Only operator-configured or physically-calibrated
+        # capacity values are authoritative for analytics and alert thresholds.
+        if (
+            self._analytics_engine.capacity is None
+            and scene_analysis_state.effective_capacity is not None
+            and scene_analysis_state.capacity_source.value in ("MANUAL", "CALIBRATED")
+        ):
             self._analytics_engine.update_capacity(scene_analysis_state.effective_capacity)
 
-        # 6. Occupancy & Crowd Analytics
-        analytics_state = self._analytics_engine.update(
-            current_count=current_occ.current_count,
-            frame_id=self._frame_sequence,
-            timestamp=now,
-        )
-
-        # 7. P0 Alert Engine
-        active_alerts_events = self._alert_engine.update(
-            crowd_level=analytics_state.crowd_level,
-            camera_offline=False,
-            detection_failed=not detection_ok,
-            timestamp=now,
-        )
-
-        # 8. System Reliability & Health State
+        # 6. System Reliability & Health State
         rel_state = self._reliability_manager.update(
-            source_state=frame_data.source_state,
+            source_state=frame_data.source_state if frame_data else SourceState.DISCONNECTED,
             frame_data=frame_data,
             detection_success=detection_ok,
             tracking_success=tracking_ok,
             current_count=current_occ.current_count,
             inference_latency_ms=infer_ms,
             face_detection_success=face_ok,
+            timestamp=now,
+        )
+
+        effective_count = (
+            rel_state.last_reliable_count
+            if rel_state.is_frozen
+            else current_occ.current_count
+        )
+
+        # 7. Occupancy & Crowd Analytics
+        analytics_state = self._analytics_engine.update(
+            current_count=effective_count,
+            frame_id=self._frame_sequence,
+            timestamp=now,
+        )
+
+        # 8. P0 Alert Engine
+        active_alerts_events = self._alert_engine.update(
+            crowd_level=analytics_state.crowd_level,
+            camera_offline=False,
+            detection_failed=not detection_ok,
             timestamp=now,
         )
 
@@ -390,6 +406,7 @@ class CVPipeline:
             tracks_count=len(tracks),
             faces_count=faces_count,
             loop_latency_ms=loop_latency_ms,
+            current_count=current_occ.current_count,
         )
 
     def step(self, timeout: float = 1.0) -> LiveState:
@@ -410,6 +427,7 @@ class CVPipeline:
         tracks_count: int,
         faces_count: int,
         loop_latency_ms: float,
+        current_count: int = 0,
     ) -> LiveState:
         """Assemble the authoritative LiveState snapshot."""
         # Counts
@@ -421,7 +439,7 @@ class CVPipeline:
         current_headcount = (
             rel_state.last_reliable_count
             if rel_state.is_frozen
-            else (self._occupancy_counter.last_state.current_count if self._occupancy_counter.last_state else 0)
+            else current_count
         )
 
         counts_dict = {

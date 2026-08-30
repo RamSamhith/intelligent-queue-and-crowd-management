@@ -22,6 +22,8 @@ env/
 .zencoder/
 .remember/
 .kilo/
+.kiro/
+.opencode/
 certain-crater/
 nasty-nebula/
 .agents/skills/
