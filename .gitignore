@@ -67,3 +67,6 @@ reports/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local verification virtual environment
+.venv_fresh/
