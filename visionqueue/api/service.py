@@ -70,9 +70,8 @@ class CVService:
 
     def _initial_prev_state(self) -> Dict[str, Any]:
         return {
-            "entries": 0, "exits": 0, "crowd_level": None, 
-            "system_state": None, "camera_state": None, 
-            "_crowd_seq": 0, "_sys_seq": 0, "_cam_seq": 0
+            "entries": 0, "exits": 0, "crowd_level": None,
+            "system_state": None, "camera_state": None,
         }
 
     def _now_utc(self) -> str:
@@ -388,8 +387,7 @@ class CVService:
 
         curr_crowd = state_dict["crowd"]["level"]
         if prev["crowd_level"] is not None and curr_crowd != prev["crowd_level"]:
-            prev["_crowd_seq"] += 1
-            dedup_key = f"{session_id}:CROWD:{prev['crowd_level']}:{curr_crowd}:{prev['_crowd_seq']}"
+            dedup_key = f"{session_id}:CROWD:{prev['crowd_level']}:{curr_crowd}"
             if dedup_key not in self._pending_critical:
                 self._enqueue_critical(EventRecord(session_id, "CROWD_LEVEL_CHANGED", now_utc, None, None, json.dumps({"from": prev["crowd_level"], "to": curr_crowd}), dedup_key))
         elif prev["crowd_level"] is None:
@@ -397,8 +395,7 @@ class CVService:
 
         curr_sys = state_dict["system_state"]
         if prev["system_state"] is not None and curr_sys != prev["system_state"]:
-            prev["_sys_seq"] += 1
-            dedup_key = f"{session_id}:SYS:{prev['system_state']}:{curr_sys}:{prev['_sys_seq']}"
+            dedup_key = f"{session_id}:SYS:{prev['system_state']}:{curr_sys}"
             if dedup_key not in self._pending_critical:
                 self._enqueue_critical(EventRecord(session_id, "SYSTEM_STATE_CHANGED", now_utc, None, None, json.dumps({"from": prev["system_state"], "to": curr_sys}), dedup_key))
         elif prev["system_state"] is None:
@@ -406,8 +403,7 @@ class CVService:
 
         curr_cam = state_dict["camera_state"]
         if prev["camera_state"] is not None and curr_cam != prev["camera_state"]:
-            prev["_cam_seq"] += 1
-            dedup_key = f"{session_id}:CAM:{prev['camera_state']}:{curr_cam}:{prev['_cam_seq']}"
+            dedup_key = f"{session_id}:CAM:{prev['camera_state']}:{curr_cam}"
             if dedup_key not in self._pending_critical:
                 self._enqueue_critical(EventRecord(session_id, "CAMERA_STATE_CHANGED", now_utc, None, None, json.dumps({"from": prev["camera_state"], "to": curr_cam}), dedup_key))
         elif prev["camera_state"] is None:
