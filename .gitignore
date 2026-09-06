@@ -50,6 +50,7 @@ datasets/
 
 # Training runs and outputs
 runs/
+*.pt
 
 # Generated reports
 reports/

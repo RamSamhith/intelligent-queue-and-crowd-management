@@ -18,8 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-sys.path.insert(0, str(PROJECT_ROOT / "scratch"))
-import long_run_soak
+from visionqueue.evaluation import soak as long_run_soak
 
 
 # =============================================================================
@@ -43,8 +42,8 @@ class TestGetProcessMemory:
         import subprocess
         result = subprocess.run(
             [sys.executable, "-c",
-             "import sys; sys.path.insert(0, 'scratch'); "
-             "import long_run_soak; "
+             "import sys; "
+             "from visionqueue.evaluation import soak; "
              "assert 'psutil' not in sys.modules, 'psutil was imported'; "
              "print('no_psutil_ok')"],
             capture_output=True, text=True, cwd=str(PROJECT_ROOT),

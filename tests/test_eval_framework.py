@@ -1,6 +1,6 @@
 """Unit tests for the VisionQueue offline evaluation framework.
 
-Tests the pure metric computation functions in scratch/eval_framework.py
+Tests the pure metric computation functions in visionqueue.evaluation.eval_framework
 without requiring GPU, video files, or the full CV pipeline.
 """
 
@@ -16,8 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-sys.path.insert(0, str(PROJECT_ROOT / "scratch"))
-import eval_framework
+from visionqueue.evaluation import eval_framework
 
 
 # =============================================================================

@@ -7,7 +7,7 @@ import numpy as np
 import cv2
 import pytest
 
-from scratch.prepare_mot20 import (
+from visionqueue.evaluation.mot_converter import (
     parse_seqinfo,
     compile_video,
     parse_gt_to_json,

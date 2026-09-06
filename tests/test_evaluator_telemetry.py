@@ -10,15 +10,13 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / "scratch"))
-
 from visionqueue.detection.types import (
     DetectorConfig,
     DEFAULT_MODEL_PATH,
     ROLLBACK_MODEL_PATH,
     STAGING_MODEL_ENV_VAR,
 )
-import evaluate_staging_comparison as esc
+from visionqueue.evaluation import staging_comparison as esc
 
 
 class TestEvaluatorTelemetry:
