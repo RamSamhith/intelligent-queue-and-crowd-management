@@ -104,7 +104,7 @@ finally:
 
 ## Verification & Testing
 
-To run the complete test suite (265 tests):
+To run the complete test suite (436 tests):
 
 ```bash
 pytest -v

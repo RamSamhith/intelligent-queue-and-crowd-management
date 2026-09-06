@@ -561,12 +561,13 @@ class TestSessionCounter:
 
     def test_session_counts_to_dict(self):
         counts = SessionCounts(
+            cumulative_track_instances=5,
             approximate_unique_count=5,
             currently_active_count=2,
             active_track_ids=[3, 7],
         )
-        assert counts.to_dict() == {
-            "approximate_unique_count": 5,
-            "currently_active_count": 2,
-            "active_track_ids": [3, 7],
-        }
+        d = counts.to_dict()
+        assert d["approximate_unique_count"] == 5
+        assert d["cumulative_track_instances"] == 5
+        assert d["currently_active_count"] == 2
+        assert d["active_track_ids"] == [3, 7]

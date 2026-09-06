@@ -452,7 +452,9 @@ class CVPipeline:
                 "entries": self._line_crossing_counter.entries if self._line_crossing_counter else 0,
                 "exits": self._line_crossing_counter.exits if self._line_crossing_counter else 0,
                 "net_count": self._line_crossing_counter.net_count if self._line_crossing_counter else 0,
-                "track_instances": session_occ.approximate_unique_count,
+                "track_instances": session_occ.cumulative_track_instances,
+                "cumulative_track_instances": session_occ.cumulative_track_instances,
+                "approximate_unique_count": session_occ.approximate_unique_count,
                 "unique_session_approx": session_occ.approximate_unique_count,
             },
         }
@@ -505,7 +507,9 @@ class CVPipeline:
 
         counts_dict = {
             "current": current_headcount,
-            "track_instances": self._session_counter.approximate_unique_count,
+            "track_instances": self._session_counter.cumulative_track_instances,
+            "cumulative_track_instances": self._session_counter.cumulative_track_instances,
+            "approximate_unique_count": self._session_counter.approximate_unique_count,
             "unique_session_approx": self._session_counter.approximate_unique_count,
             "entries": line_counts.entries if line_counts else 0,
             "exits": line_counts.exits if line_counts else 0,
@@ -554,7 +558,7 @@ class CVPipeline:
         )
         return self._last_state
 
-    def reset_session(self) -> None:
+    def reset_session(self, new_session_id: Optional[str] = None) -> None:
         """Reset tracking, counting, analytics, alerts, scene analysis, and reliability state."""
         self._tracking_adapter.reset()
         self._occupancy_counter.reset()
@@ -569,6 +573,8 @@ class CVPipeline:
         self._reliability_manager.reset()
         self._frame_sequence = 0
         self._last_state = None
+        if new_session_id is not None:
+            self._config.session_id = new_session_id
 
     @property
     def scene_analyzer(self) -> SceneAnalyzer:

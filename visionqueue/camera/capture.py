@@ -405,6 +405,8 @@ class CameraSource:
         if self._open_device():
             logger.info("Reconnection succeeded for source '%s'.", self._config.source)
             self._reconnect_count = 0
+            self._consecutive_errors = 0
+            self._last_frame_time = 0.0
             with self._lock:
                 self._state = SourceState.RUNNING
             return True

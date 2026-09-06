@@ -164,10 +164,64 @@ def test_unavailable_source_handling():
     invalid_path = "C:/non_existent_path_to_video_12345.mp4"
     config = CameraConfig(source=invalid_path, max_reconnect_attempts=0)
     cam = CameraSource(config)
-    
+
     with pytest.raises(RuntimeError, match="Failed to open video source"):
         cam.start()
-        
+
     assert cam.state == SourceState.ERROR
     assert not cam.is_running
     cam.stop()
+
+
+def test_reconnect_success_resets_last_frame_time_and_counter():
+    """After a successful reconnect, _last_frame_time and _reconnect_count must be reset.
+
+    Frame IDs (_frame_sequence) must remain monotonic across reconnects because
+    ByteTrack and downstream counting semantics depend on monotonic frame IDs.
+    Resetting them would cause track pileup.
+    """
+    config = CameraConfig(source="synthetic_path.avi", loop_video=True,
+                          max_reconnect_attempts=3, reconnect_interval_sec=0.1)
+    cam = CameraSource(config)
+
+    # Simulate pre-reconnect state
+    cam._reconnect_count = 2
+    cam._last_frame_time = time.time() - 30.0  # 30s ago — would cause FPS spike if not reset
+    cam._measured_fps = 25.0
+    cam._frame_sequence = 100
+
+    # Patch _open_device to succeed
+    cam._open_device = lambda: True
+
+    result = cam._handle_disconnect()
+    assert result is True
+    assert cam._reconnect_count == 0, "Reconnect counter must reset to 0 on success"
+    assert cam._last_frame_time == 0.0, (
+        "Last-frame-time must reset to prevent artificial FPS spike on first new frame"
+    )
+    # _frame_sequence is NOT reset (monotonic across reconnects is required by ByteTrack)
+    assert cam._frame_sequence == 100, (
+        "Frame IDs must remain monotonic across reconnects — do NOT reset _frame_sequence"
+    )
+    # _measured_fps is intentionally not reset (EMA recovers naturally)
+
+
+def test_reconnect_failure_does_not_reset_state():
+    """When _handle_disconnect returns False (stop_event set), state must remain untouched."""
+    config = CameraConfig(source="synthetic_path.avi", loop_video=True,
+                          max_reconnect_attempts=3, reconnect_interval_sec=0.0)
+    cam = CameraSource(config)
+
+    cam._reconnect_count = 2
+    cam._last_frame_time = time.time() - 30.0
+    cam._frame_sequence = 50
+
+    # Set stop event so reconnect is aborted
+    cam._stop_event.set()
+
+    result = cam._handle_disconnect()
+    assert result is False
+    # Counter may have been incremented but state cleanup must not run
+    assert cam._last_frame_time != 0.0, (
+        "On failed/aborted reconnect, _last_frame_time must not be reset"
+    )

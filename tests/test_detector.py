@@ -62,7 +62,7 @@ class TestDetectorConfig:
 
     def test_defaults(self):
         cfg = DetectorConfig()
-        assert cfg.model_path == "models/yolo26m.onnx"
+        assert cfg.model_path == "models/yolo26m_crowd.onnx"
         assert cfg.input_size == (640, 640)
         assert cfg.confidence_threshold == 0.25
         assert cfg.person_class_id == 0
@@ -76,6 +76,26 @@ class TestDetectorConfig:
     def test_custom_providers_cpu_only(self):
         cfg = DetectorConfig(providers=["CPUExecutionProvider"])
         assert cfg.providers == ["CPUExecutionProvider"]
+
+    def test_staging_env_var_override(self, monkeypatch):
+        monkeypatch.setenv("VISIONQUEUE_DETECTOR_MODEL_PATH", "models/custom_staging.onnx")
+        cfg = DetectorConfig()
+        assert cfg.model_path == "models/custom_staging.onnx"
+
+    def test_rollback_env_var_override(self, monkeypatch):
+        monkeypatch.setenv("VISIONQUEUE_DETECTOR_MODEL_PATH", "models/yolo26m.onnx")
+        cfg = DetectorConfig()
+        assert cfg.model_path == "models/yolo26m.onnx"
+
+    def test_explicit_model_path_precedence(self, monkeypatch):
+        monkeypatch.setenv("VISIONQUEUE_DETECTOR_MODEL_PATH", "models/yolo26m_crowd.onnx")
+        cfg = DetectorConfig(model_path="models/custom.onnx")
+        assert cfg.model_path == "models/custom.onnx"
+
+    def test_env_var_unset_falls_back_to_default(self, monkeypatch):
+        monkeypatch.delenv("VISIONQUEUE_DETECTOR_MODEL_PATH", raising=False)
+        cfg = DetectorConfig()
+        assert cfg.model_path == "models/yolo26m_crowd.onnx"
 
 
 # ===================================================================
@@ -242,6 +262,45 @@ class TestPostprocessing:
         assert y1 == pytest.approx(200.0, abs=0.5)
         assert x2 == pytest.approx(400.0, abs=0.5)
         assert y2 == pytest.approx(400.0, abs=0.5)
+
+    def test_rejects_nan_output(self):
+        """NaN bbox or confidence must not propagate to Detection."""
+        det = self._make_detector(confidence_threshold=0.1)
+        raw = np.zeros((1, 300, 6), dtype=np.float32)
+        raw[0, 0] = [50, 50, 200, 200, float("nan"), 0]
+        assert det._postprocess(raw, 640, 480, 1.0, 0, 0) == []
+
+    def test_rejects_pos_inf_output(self):
+        """+Inf must not propagate (would break IoU/Kalman)."""
+        det = self._make_detector(confidence_threshold=0.1)
+        raw = np.zeros((1, 300, 6), dtype=np.float32)
+        raw[0, 0] = [float("inf"), float("inf"), float("inf"), float("inf"), 0.9, 0]
+        assert det._postprocess(raw, 640, 480, 1.0, 0, 0) == []
+
+    def test_rejects_neg_inf_output(self):
+        """-Inf must not propagate."""
+        det = self._make_detector(confidence_threshold=0.1)
+        raw = np.zeros((1, 300, 6), dtype=np.float32)
+        raw[0, 0] = [float("-inf"), float("-inf"), float("-inf"), float("-inf"), 0.9, 0]
+        assert det._postprocess(raw, 640, 480, 1.0, 0, 0) == []
+
+    def test_mixed_valid_and_invalid_rejects_batch(self):
+        """Whole-array guard rejects entire batch if any row is non-finite."""
+        det = self._make_detector(confidence_threshold=0.1)
+        raw = np.zeros((1, 300, 6), dtype=np.float32)
+        raw[0, 0] = [50, 50, 200, 200, 0.95, 0]  # valid row
+        raw[0, 1] = [60, 60, 210, 210, float("nan"), 0]  # invalid row
+        # Policy: any non-finite → entire batch rejected to protect downstream.
+        assert det._postprocess(raw, 640, 480, 1.0, 0, 0) == []
+
+    def test_valid_output_unchanged_by_guard(self):
+        """Fully finite output must still produce detections."""
+        det = self._make_detector(confidence_threshold=0.1)
+        raw = np.zeros((1, 300, 6), dtype=np.float32)
+        raw[0, 0] = [100, 100, 300, 400, 0.85, 0]
+        raw[0, 1] = [200, 150, 350, 450, 0.60, 0]
+        results = det._postprocess(raw, 640, 480, 1.0, 0, 80)
+        assert len(results) == 2
 
 
 # ===================================================================

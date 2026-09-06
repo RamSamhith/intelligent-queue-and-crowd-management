@@ -15,16 +15,14 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
-# Ensure torch CUDA DLLs are discoverable by ONNX Runtime on Windows
-try:
-    import torch as _torch
-    _torch_lib = os.path.join(os.path.dirname(_torch.__file__), "lib")
-    if os.path.isdir(_torch_lib):
-        os.add_dll_directory(_torch_lib)
-except Exception:
-    pass
-
 import onnxruntime as ort
+
+# Ensure CUDA and cuDNN runtime DLLs from nvidia site-packages are preloaded on Windows
+if hasattr(ort, "preload_dlls"):
+    try:
+        ort.preload_dlls()
+    except Exception:
+        pass
 
 from visionqueue.detection.types import Detection, DetectorConfig
 
@@ -216,6 +214,10 @@ class PersonDetector:
 
         Each row: [x1, y1, x2, y2, confidence, class_id] in letterboxed space.
         """
+        if raw is None or not np.isfinite(raw).all():
+            logger.warning("Detector produced non-finite raw output; returning empty detections.")
+            return []
+
         conf_thresh = self._config.confidence_threshold
         person_id = self._config.person_class_id
         detections: List[Detection] = []
@@ -240,6 +242,10 @@ class PersonDetector:
             y1 = max(0.0, min(float(orig_h), y1))
             x2 = max(0.0, min(float(orig_w), x2))
             y2 = max(0.0, min(float(orig_h), y2))
+
+            # Discard degenerate bounding boxes
+            if x2 <= x1 or y2 <= y1:
+                continue
 
             detections.append(Detection(
                 bbox=(round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)),

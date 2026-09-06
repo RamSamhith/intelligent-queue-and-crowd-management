@@ -1,0 +1,302 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VisionQueue Ground Truth Annotation Schema",
+  "description": "Minimalist ground truth annotation for real-world video evaluation of the VisionQueue CV subsystem. Supports occupancy, crossing events, and optional trajectory annotation without requiring per-frame bounding boxes. See annotation_protocol field for how to label clips.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version identifier. Must be 1."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Video source and technical metadata.",
+      "properties": {
+        "video_filename": {
+          "type": "string",
+          "description": "Filename of the annotated video (for reference, not used by evaluator)."
+        },
+        "video_id": {
+          "type": "string",
+          "description": "Unique identifier for this clip."
+        },
+        "source_description": {
+          "type": "string",
+          "description": "Human-readable description of the camera/scene (e.g. 'Queue at campus dining hall', 'Bank teller window')."
+        },
+        "fps": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Video FPS used to calculate frame<->timestamp conversion."
+        },
+        "frame_width": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Frame width in pixels."
+        },
+        "frame_height": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Frame height in pixels."
+        },
+        "total_frames": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total number of frames in the annotated clip."
+        },
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total duration of the annotated clip in seconds."
+        },
+        "scenario_type": {
+          "type": "string",
+          "enum": ["EMPTY", "SPARSE", "DENSE", "CROSS_TRAFFIC", "SIMULTANEOUS_CROSSING", "LIGHTING_CHANGE", "MIXED"],
+          "description": "Dominant scenario type in this clip."
+        },
+        "camera_mount": {
+          "type": "string",
+          "enum": ["OVERHEAD", "ANGLED_30", "ANGLED_45", "ANGLED_60", "SIDE", "UNKNOWN"],
+          "description": "Approximate camera mounting angle."
+        },
+        "annotated_by": {
+          "type": "string",
+          "description": "Name or identifier of the human annotator."
+        },
+        "annotation_date": {
+          "type": "string",
+          "description": "ISO date string of annotation."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about conditions, known issues, or difficult sections."
+        }
+      },
+      "required": ["video_filename", "fps", "frame_width", "frame_height", "total_frames"]
+    },
+
+    "annotation_protocol": {
+      "type": "object",
+      "description": "Documents the annotation methodology used to produce this ground truth.",
+      "properties": {
+        "annotation_method": {
+          "type": "string",
+          "enum": ["MANUAL_COUNT", "PARTIAL_MANUAL", "AUDIO_HUMAN_COUNT", "TIMELINE_LOG", "REVIEWED"],
+          "description": "How the annotations were produced."
+        },
+        "track_identity_protocol": {
+          "type": "string",
+          "description": "How the annotator handled re-identification. REQUIRED: must state whether the annotator treats a re-entering person as the same annotation ID or a new one, within this specific clip. Example: 'Annotator used contextual continuity: if a person left and returned within 30 seconds with consistent appearance, they were labelled as the same annotation ID.' Or: 'Annotator created a new ID for every entry event; no cross-entry identity was assumed.'"
+        },
+        "annotation_sampling_rate": {
+          "type": "string",
+          "description": "For occupancy labels, whether every frame was annotated or sampled (e.g. 'every_frame' or 'every_30_frames')."
+        },
+        "crossing_tolerance_seconds": {
+          "type": "number",
+          "description": "The temporal matching tolerance in seconds that should be used by the evaluator to match predicted crossing events to ground truth crossing events. Document this value explicitly."
+        }
+      },
+      "required": ["track_identity_protocol", "crossing_tolerance_seconds"]
+    },
+
+    "occupancy": {
+      "type": "array",
+      "description": "Per-frame or sampled occupancy ground truth. At minimum, include enough occupancy labels to establish the true peak occupancy and validate count accuracy across the clip.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "frame": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Frame number (0-indexed)."
+          },
+          "timestamp_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Timestamp in seconds from clip start (for cross-referencing)."
+          },
+          "person_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Manually counted number of people visible within the counting zone/ROI at this frame. IMPORTANT: This count is for the SAME counting zone that the CV system is configured to evaluate. If evaluating whole-frame, count all visible people. If evaluating ROI, count only people inside the ROI."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["HIGH", "MEDIUM", "LOW"],
+            "description": "Annotator confidence in the person count at this frame."
+          }
+        },
+        "required": ["frame", "person_count", "confidence"]
+      }
+    },
+
+    "crossings": {
+      "type": "array",
+      "description": "Entry and exit events as observed by the human annotator. Each crossing is an anonymous event annotation.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "frame": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Frame number when the crossing event occurred (annotator's best estimate)."
+          },
+          "timestamp_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Timestamp of crossing."
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["ENTRY", "EXIT"],
+            "description": "Direction of crossing relative to the virtual line."
+          },
+          "annotation_id": {
+            "type": "string",
+            "description": "Anonymous local identifier (e.g. 'P1', 'person_3'). This ID is only meaningful within this annotated clip. It does NOT represent persistent identity across clips or sessions."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["HIGH", "MEDIUM", "LOW"],
+            "description": "Annotator confidence in the event."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Optional annotation notes (e.g. 'Occluded during crossing', 'Person re-entered within 20s')."
+          }
+        },
+        "required": ["frame", "direction", "annotation_id", "confidence"]
+      }
+    },
+
+    "trajectories": {
+      "type": "array",
+      "description": "OPTIONAL per-person trajectory annotations. This is the most burdensome annotation type. Include only for selected dense/occlusion segments. If omitted, trajectory-based tracking metrics will not be evaluated.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "annotation_id": {
+            "type": "string",
+            "description": "Local anonymous person identifier (e.g. 'P1'). Unique within this clip."
+          },
+          "first_frame": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "First frame where this person is visible."
+          },
+          "last_frame": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Last frame where this person is visible."
+          },
+          "segment": {
+            "type": "string",
+            "enum": ["FULL", "PARTIAL"],
+            "description": "'FULL' if person was tracked from first to last frame. 'PARTIAL' if the person entered or exited outside the annotated clip boundaries."
+          },
+          "waypoints": {
+            "type": "array",
+            "description": "Key frame positions. Sparse annotation: annotate only every N frames or at significant trajectory changes.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "frame": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Frame number."
+                },
+                "bottom_center_x": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Estimated bottom-center X pixel coordinate of the person."
+                },
+                "bottom_center_y": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Estimated bottom-center Y pixel coordinate of the person."
+                },
+                "occluded": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Whether the person was heavily occluded at this frame (annotator used best estimate)."
+                }
+              },
+              "required": ["frame", "bottom_center_x", "bottom_center_y"]
+            }
+          }
+        },
+        "required": ["annotation_id", "first_frame", "last_frame", "segment", "waypoints"]
+      }
+    },
+
+    "metrics": {
+      "type": "object",
+      "description": "Globally computed ground truth summary metrics. These are computed from the full annotated clip (occupancy + crossings) and are used to validate the evaluator's own computed totals.",
+      "properties": {
+        "total_entries": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of ENTRY crossing events in the annotated clip."
+        },
+        "total_exits": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of EXIT crossing events in the annotated clip."
+        },
+        "peak_occupancy": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum concurrent person count observed during the clip (from the occupancy array)."
+        },
+        "peak_occupancy_frame": {
+          "type": "integer",
+          "description": "Frame number at which peak occupancy first occurred."
+        },
+        "annotation_id_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of unique annotation IDs in the crossings list. NOTE: This is NOT 'true unique humans' — it is the count of distinct annotation instances within the clip, following the track_identity_protocol defined above. Do NOT confuse this with unique human beings across sessions or cameras."
+        }
+      },
+      "required": ["total_entries", "total_exits", "peak_occupancy"]
+    },
+
+    "critical_events": {
+      "type": "array",
+      "description": "Timestamps of challenging visual events to correlate with tracker breakdowns and accuracy degradation.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Timestamp of the event."
+          },
+          "frame": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Frame number of the event."
+          },
+          "event_type": {
+            "type": "string",
+            "enum": ["HEAVY_OCCLUSION", "PARTIAL_OCCLUSION", "PERSON_REENTRY", "CAMERA_MOTION", "RAPID_MOVEMENT", "STATIONARY_QUEUE", "CROWD_MERGE", "CROWD_SPLIT", "LIGHTING_CHANGE", "BACKGROUND_CLUTTER"],
+            "description": "Type of challenging event."
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of the event."
+          },
+          "annotator_severity": {
+            "type": "string",
+            "enum": ["MILD", "MODERATE", "SEVERE"],
+            "description": "Annotator's subjective severity assessment."
+          }
+        },
+        "required": ["timestamp_seconds", "frame", "event_type"]
+      }
+    }
+  },
+  "required": ["schema_version", "metadata", "annotation_protocol", "metrics"]
+}

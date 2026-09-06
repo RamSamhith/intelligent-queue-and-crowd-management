@@ -184,16 +184,18 @@ class SessionCounts:
     and counted.
 
     Attributes:
-        approximate_unique_count: Total unique track IDs observed in this session.
-        currently_active_count: Number of active tracks in the latest frame.
-        active_track_ids: Track IDs active in the latest frame.
+    approximate_unique_count: Total unique track IDs observed in this session.
+    currently_active_count: Number of active tracks in the latest frame.
+    active_track_ids: Track IDs active in the latest frame.
     """
-    approximate_unique_count: int
-    currently_active_count: int
+    cumulative_track_instances: int = 0
+    approximate_unique_count: int = 0
+    currently_active_count: int = 0
     active_track_ids: List[int] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
+            "cumulative_track_instances": self.cumulative_track_instances,
             "approximate_unique_count": self.approximate_unique_count,
             "currently_active_count": self.currently_active_count,
             "active_track_ids": list(self.active_track_ids),

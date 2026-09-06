@@ -36,8 +36,23 @@ class SessionCounter:
         self._last_active_ids: List[int] = []
 
     @property
+    def cumulative_track_instances(self) -> int:
+        """Total distinct track IDs observed in current session.
+
+        Canonical new name. Replaces the misleading "approximate_unique_count"
+        terminology. Track IDs are not human identities; this counts tracker
+        instances only.
+        """
+        return len(self._seen_track_ids)
+
+    @property
     def approximate_unique_count(self) -> int:
-        """Total distinct track IDs observed in current session."""
+        """Backward-compatible alias for cumulative_track_instances.
+
+        Preserved so existing consumers (older tests, downstream code) that
+        reference the legacy name continue to work. New code should use
+        cumulative_track_instances for clarity.
+        """
         return len(self._seen_track_ids)
 
     @property
@@ -60,8 +75,10 @@ class SessionCounter:
 
         self._last_active_ids = sorted(list(set(current_ids)))
 
+        n = len(self._seen_track_ids)
         return SessionCounts(
-            approximate_unique_count=len(self._seen_track_ids),
+            cumulative_track_instances=n,
+            approximate_unique_count=n,
             currently_active_count=len(self._last_active_ids),
             active_track_ids=self._last_active_ids,
         )

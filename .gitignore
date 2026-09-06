@@ -28,11 +28,40 @@ certain-crater/
 nasty-nebula/
 .agents/skills/
 
-# Large local benchmark test logs
+# Large local benchmark test logs and generated artifacts
 scratch/*.json
+scratch/*.csv
+scratch/*.log
+scratch/*.mp4
+scratch/*.md
+scratch/*.py
+scratch/eval_output*/
+scratch/eval_compare*/
+scratch/eval_videos/
+scratch/eval_data/
+scratch/eval_results/
+scratch/real_queue_validation/
+scratch/soak_results*
+scratch/pipeline_execution.log
+scratch/__pycache__/
 
-# Local cockpit / environment files
-\##*.md
+# Datasets (large, not versioned)
+datasets/
+
+# Training runs and outputs
+runs/
+
+# Generated reports
+reports/
+
+# Local database files
+*.db
+*.db-wal
+*.db-shm
+
+# Environment files
+.env
+.env.local
 
 # OS files
 .DS_Store

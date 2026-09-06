@@ -1,7 +1,12 @@
 """Type definitions for the VisionQueue detection subsystem."""
 
+import os
 from dataclasses import dataclass, field
 from typing import List, Tuple
+
+DEFAULT_MODEL_PATH: str = "models/yolo26m_crowd.onnx"
+ROLLBACK_MODEL_PATH: str = "models/yolo26m.onnx"
+STAGING_MODEL_ENV_VAR: str = "VISIONQUEUE_DETECTOR_MODEL_PATH"
 
 
 @dataclass(frozen=True)
@@ -34,13 +39,18 @@ class DetectorConfig:
     """Configuration for the YOLO26n ONNX person detector.
 
     Attributes:
-        model_path: Path to the ONNX model file.
+        model_path: Path to the ONNX model file. Defaults to models/yolo26m_crowd.onnx
+            (production crowd-specialized model), or the path specified by the
+            VISIONQUEUE_DETECTOR_MODEL_PATH environment variable (which can be used
+            to select models/yolo26m.onnx for rollback or staging evaluation).
         input_size: Model input spatial dimensions (height, width).
         confidence_threshold: Minimum detection confidence to accept.
         person_class_id: COCO class id for person filtering.
         providers: Ordered list of ONNX Runtime execution providers to request.
     """
-    model_path: str = "models/yolo26m.onnx"
+    model_path: str = field(
+        default_factory=lambda: os.environ.get(STAGING_MODEL_ENV_VAR, DEFAULT_MODEL_PATH)
+    )
     input_size: Tuple[int, int] = (640, 640)
     confidence_threshold: float = 0.25
     person_class_id: int = 0

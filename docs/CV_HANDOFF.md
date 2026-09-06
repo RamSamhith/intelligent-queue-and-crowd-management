@@ -297,8 +297,10 @@ Configuration is strictly divided into 4 operational tiers:
 | - COCO Person Class ID (0)                                              |
 +-------------------------------------------------------------------------+
 | STARTUP CONFIG (Specified in CVPipelineConfig at instantiation)         |
-| - camera.source (Device index / RTSP URL)                               |
-| - detector.model_path ("models/yolo26m.onnx")                           |
+| - camera.source (Device index / RTSP URL / Video file path)             |
+| - detector.model_path (Default: "models/yolo26m_crowd.onnx")             |
+|   Rollback baseline: "models/yolo26m.onnx"                              |
+|   Env Var Override: VISIONQUEUE_DETECTOR_MODEL_PATH                     |
 | - detector.confidence_threshold (Default: 0.25)                         |
 | - enable_roi (Default: False for V1 Whole-Frame counting)               |
 | - session_id (UUID string)                                              |
@@ -374,36 +376,50 @@ Measurements taken on development hardware (**NVIDIA GeForce RTX 5060 Laptop GPU
 
 ## 14. Verification & Test Baseline
 
-The CV subsystem has **224 passing unit, integration, diagnostic, and regression tests**:
+The unified VisionQueue system has **436 passing unit, integration, diagnostic, and regression tests** with **0 failures**:
 
 ```bash
-pytest -v
-============================= 224 passed in 2.50s =============================
+pytest
+============================= 436 passed in 28.57s =============================
 ```
 
-### Test Suite Breakdown
+### Complete Test Suite Breakdown (28 Modules)
 
-* `tests/test_pipeline.py` (14 tests): End-to-end coordinator, state transitions, failover.
+* `tests/test_pipeline.py` (19 tests): End-to-end coordinator, state transitions, failover.
 * `tests/test_integration_contract.py` (8 tests): JSON round-trip, schema validation, NaN/Inf checks.
-* `tests/test_bytetrack.py` (19 tests): Core two-stage association, tracking lifecycle.
+* `tests/test_bytetrack.py` (20 tests): Core two-stage association, tracking lifecycle.
 * `tests/test_bytetrack_fixes_regression.py` (8 tests): 500-frame synthetic oscillation, Stage-2 recovery.
 * `tests/test_bytetrack_diagnosis.py` (9 tests): Confidence threshold interactions.
 * `tests/test_tracking_adapter.py` (8 tests): Detection $\to$ Track contract translation.
-* `tests/test_detector.py` (26 tests): YOLO26 ONNX preprocessing, inference, clipping.
+* `tests/test_detector.py` (35 tests): YOLO26 ONNX preprocessing, inference, clipping, degenerate box rejection, model rollback override.
 * `tests/test_counting.py` (36 tests): Line crossing, whole-frame, session counters.
+* `tests/test_crossing_robustness.py` (8 tests): Line crossing edge cases and direction validation.
 * `tests/test_roi.py` (44 tests): Spatial point containment, resolution invariance.
-* `tests/test_reliability.py` (13 tests): 6-state reliability machine, count freezing.
-* `tests/test_analytics.py` (19 tests): Occupancy percentages, crowd tiers, trend.
+* `tests/test_reliability.py` (15 tests): 6-state reliability machine, count freezing, error handling.
+* `tests/test_analytics.py` (25 tests): Occupancy percentages, crowd tiers, trend.
 * `tests/test_alerts.py` (13 tests): P0 alert firing, debouncing, hysteresis clearing.
-* `tests/test_camera.py` (7 tests): OpenCV frame acquisition, reconnect logic.
+* `tests/test_camera.py` (9 tests): OpenCV frame acquisition, reconnect logic, error counter reset.
+* `tests/test_coordinator.py` (6 tests): Subsystem coordination and event dispatch.
+* `tests/test_eval_framework.py` (48 tests): MOT and synthetic dataset evaluation framework.
+* `tests/test_evaluator_telemetry.py` (6 tests): Model telemetry, active provider reporting, and rollback.
+* `tests/test_long_run_soak.py` (13 tests): Long-running soak tests, memory leak checks.
+* `tests/test_matching.py` (5 tests): Hungarian and greedy bipartite matching algorithms.
+* `tests/test_persistence.py` (6 tests): SQLite WAL persistence, transactions, and async writer queue drain.
+* `tests/test_prepare_mot20.py` (32 tests): MOT20 benchmark preparation and dataset integrity.
+* `tests/test_scene_analyzer.py` (15 tests): Scene lighting, blur, and crowd density analysis.
+* `tests/test_v11_regression.py` (16 tests): Regression tests for edge cases.
+* `tests/test_viewer_ux.py` (7 tests): Viewer UI states and overlay contracts.
+* `tests/test_api.py` (7 tests): REST API endpoints and WebSocket live streaming packets.
+* `tests/test_api_integration.py` (1 test): Complete API integration cycle.
+* `tests/test_api_lifecycle.py` (15 tests): CVService start/stop/reset lifecycle, diagnostics, and graceful termination.
 
 ---
 
 ## 15. Known System Boundaries & Limitations
 
-1. **Track Instances ≠ Unique Humans**: `counts.track_instances` counts distinct ByteTrack IDs observed during the session. A single person who exits and re-enters (after the track buffer expires) will generate a new track ID and be counted again. This metric is a diagnostic indicator of tracker activity — it does NOT represent unique human visitors. If a person re-enters within the track buffer window, the same track ID is retained and the count is not inflated.
+1. **Track Instances ≠ Unique Humans**: `counts.track_instances` counts distinct ByteTrack IDs observed during the session. A single person who exits and re-enters (after the track buffer expires) will generate a new track ID and be counted again. This metric is a diagnostic indicator of tracker activity — it does NOT represent unique human visitors.
 2. **Camera Occlusion**: Extreme physical occlusion (e.g. a person completely hidden behind a pillar for $>1\text{ second}$) will cause track termination upon buffer expiration.
-3. **Lighting & Camera Angle**: Optimal detection requires overhead or 30–60° angled mounting with adequate illumination.
+3. **Physical / Real-CCTV Operational Deployment**: Software integration, synthetic validation, and benchmark dataset validation are 100% complete; physical camera site calibration remains an operational deployment validation item.
 
 ---
 
@@ -411,7 +427,7 @@ pytest -v
 
 * **ROI Activation**: To restrict counting to a physical queue corral, set `enable_roi=True` and pass `roi=ROIConfig(x, y, w, h)`.
 * **Multi-Camera Expansion**: The `CVPipeline` class is designed to be instantiated per camera stream (`pipeline_cam1`, `pipeline_cam2`).
-* **Detector Fine-Tuning**: Custom weights can be exported to ONNX format and loaded via `DetectorConfig(model_path="models/custom.onnx")`.
+* **Detector Fine-Tuning**: Custom weights can be exported to ONNX format and loaded via `DetectorConfig(model_path="models/custom.onnx")` or `VISIONQUEUE_DETECTOR_MODEL_PATH`.
 
 ---
 
@@ -431,11 +447,10 @@ CV SUBSYSTEM (Ram Samhith Owned - DO NOT MODIFY DIRECTLY):
 ├── models/
 └── tests/
 
-DOWNSTREAM OWNED (Backend / Frontend / Database Teams):
-├── FastAPI / Web Server Application
-├── WebSocket Endpoints
-├── Database Schemas, Migrations & ORMs
-└── React / Web Frontend Dashboards & Visualizations
+BACKEND & INTEGRATION (Verified & Hardened):
+├── visionqueue/api/
+├── visionqueue/persistence/
+└── docs/
 ```
 
 ---
@@ -444,11 +459,12 @@ DOWNSTREAM OWNED (Backend / Frontend / Database Teams):
 
 ### Deep Learning Models
 
-| Artifact Name | Family | Format | Dimensions | Size | SHA-256 Checksum |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `models/yolo26m.onnx` | YOLO26m (Medium) | ONNX | $640 \times 640$ | $81.96\text{ MB}$ | `35b1b844cc0f60934bc4eb82090b539f7f27cd978a90f7b5aa2817b7c7b24b0c` |
-| `models/yolo26n.onnx` | YOLO26n (Nano) | ONNX | $640 \times 640$ | $9.94\text{ MB}$ | `bada01d1dad25ec81ab4437ef160be58033449f8939f5ffaf87d4dded230f977` |
-| `models/face_detection_yunet_2023mar.onnx` | YuNet | ONNX | Dynamic | $232.58\text{ KB}$ | `8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4` |
+| Artifact Name | Role | Family | Format | Dimensions | Size | Empirical Evidence |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `models/yolo26m_crowd.onnx` | **Default Production Model** | YOLO26m CrowdHuman-Trained | ONNX | $640 \times 640$ | $81.96\text{ MB}$ | Recall: 78.54% (vs 28.87%), Occluded Recall: 67.17% (vs 7.67%), F1: 83.32% (vs 44.09%), MAE: 6.59 (vs 38.34) |
+| `models/yolo26m.onnx` | **Rollback Baseline Model** | YOLO26m COCO | ONNX | $640 \times 640$ | $81.96\text{ MB}$ | General-purpose person detection baseline |
+| `models/yolo26n.onnx` | Low-Power / Embedded | YOLO26n (Nano) | ONNX | $640 \times 640$ | $9.94\text{ MB}$ | Lightweight edge device testing |
+| `models/face_detection_yunet_2023mar.onnx` | Optional Presence | YuNet | ONNX | Dynamic | $232.58\text{ KB}$ | Transient presence detection (non-biometric) |
 
 ### Frozen Runtime Dependencies
 
@@ -457,4 +473,8 @@ numpy>=1.26.0,<3.0.0
 opencv-python>=4.8.0,<6.0.0
 onnxruntime-gpu>=1.18.0,<2.0.0
 pytest>=8.0.0
+fastapi>=0.110.0
+pydantic>=2.0.0
+starlette>=0.36.0
 ```
+
